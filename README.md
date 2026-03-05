@@ -203,10 +203,17 @@ Six professional pre-built templates:
 ## Privacy & Data Handling
 
 - **Zero server communication**: All processing happens client-side
-- **No data collection**: No analytics, no tracking
+- **Optional analytics only**: Anonymous usage counters (page load, conversion, copy action) are disabled by default and require explicit opt-in
 - **No storage**: Content exists only in browser session
 - **GDPR compliant**: By nature of not collecting data
 - **Copy-paste only**: User controls all data flow
+
+## Release Checklist
+
+- [ ] Accessibility pass
+- [ ] Cross-browser sanity
+- [ ] Mobile layout
+- [ ] Security checks
 
 ---
 
