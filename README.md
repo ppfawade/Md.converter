@@ -291,3 +291,17 @@ Six professional pre-built templates:
 ## Conclusion
 
 This MVP delivers a focused, beautiful, and functional markdown converter that prioritizes simplicity, privacy, and design excellence. By keeping scope tight and execution precise, we create a tool that does one thing exceptionally well—exactly in the spirit of Jony Ive's design philosophy.
+
+## Deploy on Vercel
+
+1. Import this repository in Vercel.
+2. Choose **Framework Preset**: `Other`.
+3. Set **Build Command** to `none`.
+4. Set **Output Directory** to `.`.
+5. Deploy.
+
+### Routing notes
+
+- `vercel.json` explicitly rewrites `/` to `/index.html`.
+- A custom `404.html` is included for unknown routes.
+- If you later add client-side routing, keep or expand the fallback rewrite (`"/app/:path*" -> "/index.html"`) so app routes load the SPA shell.
