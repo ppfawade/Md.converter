@@ -677,6 +677,47 @@
         .panel:nth-child(2) {
             animation-delay: 0.1s;
         }
+
+        body.large-doc-mode .panel,
+        body.large-doc-mode .toolbar-btn,
+        body.large-doc-mode .btn,
+        body.large-doc-mode .notification,
+        body.large-doc-mode .modal {
+            transition: none;
+            animation: none;
+        }
+
+        body.large-doc-mode .panel:hover,
+        body.large-doc-mode .toolbar-btn:hover,
+        body.large-doc-mode .btn:hover {
+            transform: none;
+            box-shadow: var(--shadow-sm);
+        }
+
+        body.large-doc-mode .output-area {
+            scroll-behavior: auto;
+        }
+
+        .diagnostics-panel {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 12px 16px;
+            margin-top: 20px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            display: none;
+        }
+
+        .diagnostics-panel.visible {
+            display: block;
+        }
+
+        .diagnostics-title {
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: var(--text-primary);
+        }
     </style>
 </head>
 <body>
@@ -711,6 +752,13 @@
             </svg>
             Dark Mode
         </button>
+        <button class="toolbar-btn" id="largeDocModeBtn" title="Reduce effects for large markdown documents">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M2 2.5A1.5 1.5 0 0 1 3.5 1h9A1.5 1.5 0 0 1 14 2.5v11a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 13.5v-11zm1.5-.5a.5.5 0 0 0-.5.5v11a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 .5-.5v-11a.5.5 0 0 0-.5-.5h-9zM5 5h6v1H5V5zm0 2h6v1H5V7zm0 2h4v1H5V9z"/>
+            </svg>
+            Large Doc Mode
+        </button>
+    </div>
     </nav>
 
     <main id="main-content" tabindex="-1">
@@ -764,6 +812,10 @@ Try these examples:
                     </div>
                 </div>
             </div>
+        </div>
+        <div class="diagnostics-panel" id="diagnosticsPanel" aria-live="polite">
+            <div class="diagnostics-title">Performance diagnostics (development only)</div>
+            <div id="diagnosticsContent">Waiting for input…</div>
         </div>
     </main>
 
@@ -949,6 +1001,170 @@ Try these examples:
         const guideBtn = document.getElementById('guideBtn');
         const shortcutsBtn = document.getElementById('shortcutsBtn');
         const templatesBtn = document.getElementById('templatesBtn');
+        const largeDocModeBtn = document.getElementById('largeDocModeBtn');
+        const diagnosticsPanel = document.getElementById('diagnosticsPanel');
+        const diagnosticsContent = document.getElementById('diagnosticsContent');
+
+        const DEBOUNCE_MS = 150;
+        const LARGE_DOC_THRESHOLD = 15000;
+        const IS_DEV_MODE = ['localhost', '127.0.0.1'].includes(window.location.hostname) || window.location.search.includes('dev=1');
+
+        const performanceStats = {
+            lastInputLatency: 0,
+            lastParseDuration: 0,
+            lastRenderDuration: 0,
+            avgInputLatency: 0,
+            avgParseDuration: 0,
+            avgRenderDuration: 0,
+            samples: 0
+        };
+
+        let pendingDebounce = null;
+        let lastInputTimestamp = 0;
+        let parseSequence = 0;
+        let activeParseSequence = 0;
+        let largeDocumentMode = false;
+
+        const workerScript = `
+            function markdownToHtml(markdown) {
+                if (!markdown.trim()) {
+                    return \`<div class="empty-state"><div class="empty-icon">✨</div><p>Your formatted text will appear here</p></div>\`;
+                }
+
+                let html = markdown;
+                html = html.replace(/^######\s+(.+)$/gm, '<h6>$1</h6>');
+                html = html.replace(/^#####\s+(.+)$/gm, '<h5>$1</h5>');
+                html = html.replace(/^####\s+(.+)$/gm, '<h4>$1</h4>');
+                html = html.replace(/^###\s+(.+)$/gm, '<h3>$1</h3>');
+                html = html.replace(/^##\s+(.+)$/gm, '<h2>$1</h2>');
+                html = html.replace(/^#\s+(.+)$/gm, '<h1>$1</h1>');
+                html = html.replace(/^(?:---|\*\*\*|___)\s*$/gm, '<hr>');
+                html = html.replace(/```([^`]+)```/g, '<pre><code>$1</code></pre>');
+                html = html.replace(/^>\s+(.+)$/gm, '<blockquote>$1</blockquote>');
+                html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+                html = html.replace(/__(.+?)__/g, '<strong>$1</strong>');
+                html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+                html = html.replace(/_(.+?)_/g, '<em>$1</em>');
+                html = html.replace(/~~(.+?)~~/g, '<del>$1</del>');
+                html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+                html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+                html = html.replace(/^[-*+]\s+(.+)$/gm, '<li>$1</li>');
+                html = html.replace(/(<li>.*<\/li>)/s, (match) => '<ul>' + match + '</ul>');
+                html = html.replace(/^\d+\.\s+(.+)$/gm, '<li>$1</li>');
+                html = html.replace(/(<li>.*<\/li>)/s, (match) => {
+                    if (!match.includes('<ul>')) {
+                        return '<ol>' + match + '</ol>';
+                    }
+                    return match;
+                });
+
+                html = html.split('\n\n').map((para) => {
+                    para = para.trim();
+                    if (!para) return '';
+                    if (para.startsWith('<h') || para.startsWith('<ul') ||
+                        para.startsWith('<ol') || para.startsWith('<pre') ||
+                        para.startsWith('<blockquote') || para.startsWith('<hr')) {
+                        return para;
+                    }
+                    return '<p>' + para.replace(/\n/g, '<br>') + '</p>';
+                }).join('\n');
+
+                return html;
+            }
+
+            self.onmessage = (event) => {
+                const { markdown, sequence } = event.data;
+                const parseStart = performance.now();
+                const html = markdownToHtml(markdown);
+                const parseDuration = performance.now() - parseStart;
+                self.postMessage({ html, parseDuration, sequence });
+            };
+        `;
+
+        const parserWorker = new Worker(URL.createObjectURL(new Blob([workerScript], { type: 'text/javascript' })));
+
+        function updatePerformanceStats(inputLatency, parseDuration, renderDuration) {
+            performanceStats.samples += 1;
+            performanceStats.lastInputLatency = inputLatency;
+            performanceStats.lastParseDuration = parseDuration;
+            performanceStats.lastRenderDuration = renderDuration;
+
+            performanceStats.avgInputLatency += (inputLatency - performanceStats.avgInputLatency) / performanceStats.samples;
+            performanceStats.avgParseDuration += (parseDuration - performanceStats.avgParseDuration) / performanceStats.samples;
+            performanceStats.avgRenderDuration += (renderDuration - performanceStats.avgRenderDuration) / performanceStats.samples;
+
+            if (IS_DEV_MODE) {
+                diagnosticsContent.innerHTML = `
+                    <div>Samples: ${performanceStats.samples}</div>
+                    <div>Input latency: ${inputLatency.toFixed(2)}ms (avg ${performanceStats.avgInputLatency.toFixed(2)}ms)</div>
+                    <div>Parse duration: ${parseDuration.toFixed(2)}ms (avg ${performanceStats.avgParseDuration.toFixed(2)}ms)</div>
+                    <div>Render duration: ${renderDuration.toFixed(2)}ms (avg ${performanceStats.avgRenderDuration.toFixed(2)}ms)</div>
+                    <div>Debounce: ${DEBOUNCE_MS}ms • Mode: ${largeDocumentMode ? 'Large document' : 'Standard'}</div>
+                `;
+            }
+        }
+
+        function applyLargeDocumentMode(enabled, source = 'manual') {
+            largeDocumentMode = enabled;
+            document.body.classList.toggle('large-doc-mode', enabled);
+            largeDocModeBtn.classList.toggle('active', enabled);
+            guideBtn.disabled = enabled;
+            guideBtn.style.opacity = enabled ? '0.55' : '';
+            guideBtn.title = enabled ? 'Disabled while large document mode is active' : '';
+
+            if (source === 'manual') {
+                showNotification(enabled ? '⚡ Large document mode enabled' : '✨ Large document mode disabled');
+            }
+        }
+
+        function autoTuneLargeDocumentMode() {
+            const shouldEnable = markdownInput.value.length >= LARGE_DOC_THRESHOLD;
+            if (shouldEnable !== largeDocumentMode) {
+                applyLargeDocumentMode(shouldEnable, 'auto');
+                showNotification(shouldEnable ? '⚡ Large document mode auto-enabled' : '✨ Large document mode auto-disabled');
+            }
+        }
+
+        function renderMarkdown(markdown) {
+            parseSequence += 1;
+            activeParseSequence = parseSequence;
+            parserWorker.postMessage({ markdown, sequence: parseSequence });
+        }
+
+        parserWorker.onmessage = (event) => {
+            const { html, parseDuration, sequence } = event.data;
+            if (sequence !== activeParseSequence) {
+                return;
+            }
+
+            const beforePaint = performance.now();
+            output.innerHTML = html;
+            requestAnimationFrame(() => {
+                const inputLatency = Math.max(0, beforePaint - lastInputTimestamp);
+                const renderDuration = performance.now() - beforePaint;
+                updatePerformanceStats(inputLatency, parseDuration, renderDuration);
+            });
+        };
+
+        function debounceRender(markdown) {
+            clearTimeout(pendingDebounce);
+            pendingDebounce = setTimeout(() => {
+                renderMarkdown(markdown);
+            }, DEBOUNCE_MS);
+        }
+
+        function showNotification(message) {
+            notification.textContent = message;
+            notification.classList.add('show');
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 2000);
+        }
+
+        function updateCharCount() {
+            const count = markdownInput.value.length;
+            charCount.textContent = `${count.toLocaleString()} character${count !== 1 ? 's' : ''}`;
+        }
 
         // Templates data
         const templates = {
@@ -1092,7 +1308,30 @@ You've successfully learned...`
             }
         };
 
-        // Theme handling
+        function loadTemplates() {
+            const grid = document.getElementById('templateGrid');
+            grid.innerHTML = '';
+
+            Object.keys(templates).forEach(key => {
+                const template = templates[key];
+                const card = document.createElement('div');
+                card.className = 'template-card';
+                card.innerHTML = `
+                    <div class="template-name">${template.name}</div>
+                    <div class="template-desc">${template.desc}</div>
+                `;
+                card.addEventListener('click', () => {
+                    markdownInput.value = template.content;
+                    updateCharCount();
+                    autoTuneLargeDocumentMode();
+                    debounceRender(template.content);
+                    closeModal('templatesModal');
+                    showNotification(`✓ ${template.name} template loaded`);
+                });
+                grid.appendChild(card);
+            });
+        }
+
         function toggleTheme() {
             const currentTheme = document.documentElement.getAttribute('data-theme');
             const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
@@ -1159,11 +1398,22 @@ You've successfully learned...`
             }
         }
 
+        window.closeModal = closeModal;
         document.querySelectorAll('[data-modal-close]').forEach(btn => {
             btn.addEventListener('click', () => closeModal(btn.dataset.modalClose));
         });
 
-        // Close modals on overlay click
+        // Load saved theme
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        if (savedTheme === 'dark') {
+            document.documentElement.setAttribute('data-theme', 'dark');
+            themeBtn.classList.add('active');
+        }
+
+        if (IS_DEV_MODE) {
+            diagnosticsPanel.classList.add('visible');
+        }
+
         document.querySelectorAll('.modal-overlay').forEach(overlay => {
             overlay.addEventListener('click', (e) => {
                 if (e.target === overlay) {
@@ -1205,49 +1455,44 @@ You've successfully learned...`
             loadTemplates();
             openModal('templatesModal');
         });
+        themeBtn.addEventListener('click', toggleTheme);
+        largeDocModeBtn.addEventListener('click', () => applyLargeDocumentMode(!largeDocumentMode));
 
-        // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
-            // Ctrl/Cmd + Shift + C - Copy output
             if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'C') {
                 e.preventDefault();
                 copyBtn.click();
             }
-            
-            // Ctrl/Cmd + Shift + V - Paste input
+
             if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'V') {
                 e.preventDefault();
                 pasteBtn.click();
             }
-            
-            // Ctrl/Cmd + Shift + X - Clear input
+
             if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'X') {
                 e.preventDefault();
                 markdownInput.value = '';
-                convertMarkdown('');
                 updateCharCount();
+                autoTuneLargeDocumentMode();
+                debounceRender('');
                 showNotification('✓ Input cleared');
             }
-            
-            // Ctrl/Cmd + Shift + D - Toggle dark mode
+
             if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'D') {
                 e.preventDefault();
                 toggleTheme();
             }
-            
-            // ? - Show syntax guide
-            if (e.key === '?' && !e.ctrlKey && !e.metaKey && document.activeElement !== markdownInput) {
+
+            if (e.key === '?' && !e.ctrlKey && !e.metaKey && document.activeElement !== markdownInput && !largeDocumentMode) {
                 e.preventDefault();
                 openModal('guideModal');
             }
-            
-            // Ctrl/Cmd + ? - Show shortcuts
+
             if ((e.ctrlKey || e.metaKey) && e.key === '?') {
                 e.preventDefault();
                 openModal('shortcutsModal');
             }
-            
-            // Escape - Close modals
+
             if (e.key === 'Escape') {
                 document.querySelectorAll('.modal-overlay.active').forEach(modal => {
                     closeModal(modal.id);
@@ -1255,99 +1500,11 @@ You've successfully learned...`
             }
         });
 
-        function showNotification(message) {
-            notification.textContent = message;
-            notification.classList.add('show');
-            setTimeout(() => {
-                notification.classList.remove('show');
-            }, 2000);
-        }
-
-        function convertMarkdown(markdown) {
-            if (!markdown.trim()) {
-                output.innerHTML = `
-                    <div class="empty-state">
-                        <div class="empty-icon">✨</div>
-                        <p>Your formatted text will appear here</p>
-                    </div>
-                `;
-                return;
-            }
-
-            let html = markdown;
-
-            // Headers
-            html = html.replace(/^######\s+(.+)$/gm, '<h6>$1</h6>');
-            html = html.replace(/^#####\s+(.+)$/gm, '<h5>$1</h5>');
-            html = html.replace(/^####\s+(.+)$/gm, '<h4>$1</h4>');
-            html = html.replace(/^###\s+(.+)$/gm, '<h3>$1</h3>');
-            html = html.replace(/^##\s+(.+)$/gm, '<h2>$1</h2>');
-            html = html.replace(/^#\s+(.+)$/gm, '<h1>$1</h1>');
-
-            // Horizontal rules
-            html = html.replace(/^(?:---|\*\*\*|___)\s*$/gm, '<hr>');
-
-            // Code blocks
-            html = html.replace(/```([^`]+)```/g, '<pre><code>$1</code></pre>');
-
-            // Blockquotes
-            html = html.replace(/^>\s+(.+)$/gm, '<blockquote>$1</blockquote>');
-
-            // Bold
-            html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-            html = html.replace(/__(.+?)__/g, '<strong>$1</strong>');
-
-            // Italic
-            html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-            html = html.replace(/_(.+?)_/g, '<em>$1</em>');
-
-            // Strikethrough
-            html = html.replace(/~~(.+?)~~/g, '<del>$1</del>');
-
-            // Links
-            html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
-
-            // Inline code
-            html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-
-            // Unordered lists
-            html = html.replace(/^[-*+]\s+(.+)$/gm, '<li>$1</li>');
-            html = html.replace(/(<li>.*<\/li>)/s, function(match) {
-                return '<ul>' + match + '</ul>';
-            });
-
-            // Ordered lists
-            html = html.replace(/^\d+\.\s+(.+)$/gm, '<li>$1</li>');
-            html = html.replace(/(<li>.*<\/li>)/s, function(match) {
-                if (!match.includes('<ul>')) {
-                    return '<ol>' + match + '</ol>';
-                }
-                return match;
-            });
-
-            // Paragraphs
-            html = html.split('\n\n').map(para => {
-                para = para.trim();
-                if (!para) return '';
-                if (para.startsWith('<h') || para.startsWith('<ul') || 
-                    para.startsWith('<ol') || para.startsWith('<pre') || 
-                    para.startsWith('<blockquote') || para.startsWith('<hr')) {
-                    return para;
-                }
-                return '<p>' + para.replace(/\n/g, '<br>') + '</p>';
-            }).join('\n');
-
-            output.innerHTML = html;
-        }
-
-        function updateCharCount() {
-            const count = markdownInput.value.length;
-            charCount.textContent = `${count.toLocaleString()} character${count !== 1 ? 's' : ''}`;
-        }
-
-        markdownInput.addEventListener('input', () => {
-            convertMarkdown(markdownInput.value);
+        markdownInput.addEventListener('input', (event) => {
+            lastInputTimestamp = event.timeStamp || performance.now();
             updateCharCount();
+            autoTuneLargeDocumentMode();
+            debounceRender(markdownInput.value);
         });
 
         copyBtn.addEventListener('click', async () => {
@@ -1368,16 +1525,19 @@ You've successfully learned...`
             try {
                 const text = await navigator.clipboard.readText();
                 markdownInput.value = text;
-                convertMarkdown(text);
+                lastInputTimestamp = performance.now();
                 updateCharCount();
+                autoTuneLargeDocumentMode();
+                debounceRender(text);
                 showNotification('✓ Pasted from clipboard!');
             } catch (err) {
                 showNotification('Failed to paste. Please allow clipboard access.');
             }
         });
 
-        // Initialize
+        lastInputTimestamp = performance.now();
         updateCharCount();
+        debounceRender(markdownInput.value);
     </script>
 </body>
 </html>
