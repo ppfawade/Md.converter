@@ -1,0 +1,12 @@
+{
+  "name": "md-converter",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Static checks and CI scripts for Md.converter",
+  "scripts": {
+    "lint": "node scripts/lint-html-css-js.mjs",
+    "check:meta": "node scripts/validate-links-meta.mjs",
+    "check:smoke": "node scripts/static-smoke-checks.mjs",
+    "ci": "npm run lint && npm run check:meta && npm run check:smoke"
+  }
+}
