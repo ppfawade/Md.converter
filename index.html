@@ -4,6 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Bidirectional Markdown/Rich Text Editor</title>
+  <meta name="description" content="Private markdown and rich text editor with local-first sync and optional privacy-preserving analytics." />
+  <link rel="canonical" href="https://mdconverter.app/" />
+  <meta property="og:title" content="Bidirectional Markdown/Rich Text Editor" />
+  <meta property="og:description" content="Edit markdown and rich text side-by-side with fast local sync." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://mdconverter.app/" />
+  <meta property="og:image" content="https://mdconverter.app/og-image.png" />
   <style>
     :root { color-scheme: light dark; }
     body { margin: 0; font-family: Inter, system-ui, sans-serif; background: #f5f7fb; color: #111827; }
@@ -21,6 +28,7 @@
     #conflictBanner { display: none; margin-bottom: 12px; background: #fef3c7; border: 1px solid #f59e0b; color: #92400e; padding: 10px 12px; border-radius: 10px; }
     #conflictBanner.show { display: block; }
     .muted { color: #6b7280; font-size: 12px; }
+    #analyticsSummary { font-size: 12px; color: #4b5563; }
     @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } .panel { min-height: 40vh; } }
   </style>
 </head>
@@ -32,6 +40,9 @@
       <label><input id="liveSyncToggle" type="checkbox" checked /> Live sync</label>
       <button class="btn" id="syncFromRichBtn">Sync Rich → Markdown</button>
       <button class="btn" id="syncFromMarkdownBtn">Sync Markdown → Rich</button>
+      <button class="btn" id="copyMarkdownBtn">Copy Markdown</button>
+      <label><input id="analyticsOptIn" type="checkbox" /> Share anonymous usage metrics</label>
+      <span id="analyticsSummary" aria-live="polite"></span>
       <span class="muted">Manual sync buttons are useful for very large documents.</span>
     </div>
 
@@ -53,12 +64,63 @@
     const liveSyncToggle = document.getElementById('liveSyncToggle');
     const syncFromRichBtn = document.getElementById('syncFromRichBtn');
     const syncFromMarkdownBtn = document.getElementById('syncFromMarkdownBtn');
+    const copyMarkdownBtn = document.getElementById('copyMarkdownBtn');
+    const analyticsOptIn = document.getElementById('analyticsOptIn');
+    const analyticsSummary = document.getElementById('analyticsSummary');
     const conflictBanner = document.getElementById('conflictBanner');
+
+    const ANALYTICS_STORAGE_KEY = 'mdc.analytics.v1';
+    const ANALYTICS_ENDPOINT = '';
 
     let suppressRichInput = false;
     let suppressMarkdownInput = false;
     let lastEdit = { pane: null, at: 0 };
     let bannerTimer;
+
+    function loadAnalyticsState() {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(ANALYTICS_STORAGE_KEY) || '{}');
+        return {
+          optedIn: Boolean(parsed.optedIn),
+          pageLoads: Number(parsed.pageLoads || 0),
+          conversions: Number(parsed.conversions || 0),
+          copyActions: Number(parsed.copyActions || 0)
+        };
+      } catch (_) {
+        return { optedIn: false, pageLoads: 0, conversions: 0, copyActions: 0 };
+      }
+    }
+
+    let analyticsState = loadAnalyticsState();
+
+    function saveAnalyticsState() {
+      localStorage.setItem(ANALYTICS_STORAGE_KEY, JSON.stringify(analyticsState));
+    }
+
+    function renderAnalyticsSummary() {
+      analyticsOptIn.checked = analyticsState.optedIn;
+      analyticsSummary.textContent = analyticsState.optedIn
+        ? `Anonymous metrics enabled — loads: ${analyticsState.pageLoads}, conversions: ${analyticsState.conversions}, copies: ${analyticsState.copyActions}`
+        : 'Anonymous metrics disabled';
+    }
+
+    function trackAnalytics(eventName) {
+      if (!analyticsState.optedIn) return;
+      if (eventName === 'page_load') analyticsState.pageLoads += 1;
+      if (eventName === 'conversion') analyticsState.conversions += 1;
+      if (eventName === 'copy_action') analyticsState.copyActions += 1;
+      saveAnalyticsState();
+      renderAnalyticsSummary();
+
+      if (ANALYTICS_ENDPOINT) {
+        const payload = {
+          event: eventName,
+          ts: Date.now(),
+          route: location.pathname
+        };
+        navigator.sendBeacon(ANALYTICS_ENDPOINT, JSON.stringify(payload));
+      }
+    }
 
     function escapeHtml(s) {
       return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -252,6 +314,7 @@
         richEditor.focus();
         setContentEditableSelectionOffsets(richEditor, sel.start, sel.end);
       }
+      trackAnalytics('conversion');
     }
 
     richEditor.addEventListener('input', () => {
@@ -268,7 +331,22 @@
 
     syncFromRichBtn.addEventListener('click', syncRichToMarkdown);
     syncFromMarkdownBtn.addEventListener('click', syncMarkdownToRich);
+    analyticsOptIn.addEventListener('change', () => {
+      analyticsState.optedIn = analyticsOptIn.checked;
+      saveAnalyticsState();
+      renderAnalyticsSummary();
+      if (analyticsState.optedIn) trackAnalytics('page_load');
+    });
 
+    copyMarkdownBtn.addEventListener('click', async () => {
+      await navigator.clipboard.writeText(markdownPane.value);
+      copyMarkdownBtn.textContent = 'Copied!';
+      setTimeout(() => { copyMarkdownBtn.textContent = 'Copy Markdown'; }, 1200);
+      trackAnalytics('copy_action');
+    });
+
+    renderAnalyticsSummary();
+    trackAnalytics('page_load');
     syncRichToMarkdown();
   </script>
 </body>
