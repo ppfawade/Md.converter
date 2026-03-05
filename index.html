@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bidirectional Markdown/Rich Text Editor</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { margin: 0; font-family: Inter, system-ui, sans-serif; background: #f5f7fb; color: #111827; }
+    .app { max-width: 1200px; margin: 0 auto; padding: 20px; }
+    .controls { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+    .btn { border: 1px solid #cbd5e1; background: #fff; border-radius: 10px; padding: 8px 12px; cursor: pointer; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .panel { background: #fff; border: 1px solid #dbe2ef; border-radius: 12px; padding: 12px; min-height: 70vh; display: flex; flex-direction: column; }
+    .panel h2 { margin: 0 0 10px; font-size: 16px; }
+    #richEditor {
+      flex: 1; border: 1px solid #d1d5db; border-radius: 10px; padding: 12px; overflow: auto; line-height: 1.5;
+    }
+    #richEditor:focus, #markdownPane:focus { outline: 2px solid #60a5fa; outline-offset: 1px; }
+    #markdownPane { flex: 1; resize: none; border: 1px solid #d1d5db; border-radius: 10px; padding: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; line-height: 1.5; }
+    #conflictBanner { display: none; margin-bottom: 12px; background: #fef3c7; border: 1px solid #f59e0b; color: #92400e; padding: 10px 12px; border-radius: 10px; }
+    #conflictBanner.show { display: block; }
+    .muted { color: #6b7280; font-size: 12px; }
+    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } .panel { min-height: 40vh; } }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <h1>Dual Markdown / Rich Text Editor</h1>
+    <div id="conflictBanner">⚠️ Rapid edits detected in both panes. Last edit wins. Use manual sync to resolve safely.</div>
+    <div class="controls">
+      <label><input id="liveSyncToggle" type="checkbox" checked /> Live sync</label>
+      <button class="btn" id="syncFromRichBtn">Sync Rich → Markdown</button>
+      <button class="btn" id="syncFromMarkdownBtn">Sync Markdown → Rich</button>
+      <span class="muted">Manual sync buttons are useful for very large documents.</span>
+    </div>
+
+    <div class="grid">
+      <section class="panel">
+        <h2>Rich Text (editable)</h2>
+        <div id="richEditor" contenteditable="true"><h1>Welcome</h1><p>Edit this rich text pane or the markdown pane. They stay in sync.</p><ul><li>Bold, italic, links, lists</li><li>Headings and blockquotes</li></ul></div>
+      </section>
+      <section class="panel">
+        <h2>Markdown (editable)</h2>
+        <textarea id="markdownPane" spellcheck="false"></textarea>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const richEditor = document.getElementById('richEditor');
+    const markdownPane = document.getElementById('markdownPane');
+    const liveSyncToggle = document.getElementById('liveSyncToggle');
+    const syncFromRichBtn = document.getElementById('syncFromRichBtn');
+    const syncFromMarkdownBtn = document.getElementById('syncFromMarkdownBtn');
+    const conflictBanner = document.getElementById('conflictBanner');
+
+    let suppressRichInput = false;
+    let suppressMarkdownInput = false;
+    let lastEdit = { pane: null, at: 0 };
+    let bannerTimer;
+
+    function escapeHtml(s) {
+      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function inlineNodeToMarkdown(node) {
+      if (node.nodeType === Node.TEXT_NODE) return node.textContent;
+      if (node.nodeType !== Node.ELEMENT_NODE) return '';
+      const content = Array.from(node.childNodes).map(inlineNodeToMarkdown).join('');
+      const tag = node.tagName.toLowerCase();
+      if (tag === 'strong' || tag === 'b') return `**${content}**`;
+      if (tag === 'em' || tag === 'i') return `*${content}*`;
+      if (tag === 'code') return `\`${content}\``;
+      if (tag === 'a') return `[${content}](${node.getAttribute('href') || '#'})`;
+      if (tag === 'br') return '\n';
+      return content;
+    }
+
+    function htmlToNormalizedModel(html) {
+      const doc = new DOMParser().parseFromString(`<div>${html}</div>`, 'text/html');
+      const root = doc.body.firstElementChild;
+      const model = [];
+      Array.from(root.childNodes).forEach((node) => {
+        if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()) {
+          model.push({ type: 'paragraph', text: node.textContent.trim() });
+          return;
+        }
+        if (node.nodeType !== Node.ELEMENT_NODE) return;
+        const tag = node.tagName.toLowerCase();
+        if (/^h[1-6]$/.test(tag)) {
+          model.push({ type: 'heading', level: Number(tag[1]), text: Array.from(node.childNodes).map(inlineNodeToMarkdown).join('') });
+        } else if (tag === 'p' || tag === 'div') {
+          model.push({ type: 'paragraph', text: Array.from(node.childNodes).map(inlineNodeToMarkdown).join('') });
+        } else if (tag === 'blockquote') {
+          model.push({ type: 'blockquote', text: Array.from(node.childNodes).map(inlineNodeToMarkdown).join('') });
+        } else if (tag === 'pre') {
+          model.push({ type: 'code', text: node.textContent.replace(/\n$/, '') });
+        } else if (tag === 'hr') {
+          model.push({ type: 'hr' });
+        } else if (tag === 'ul' || tag === 'ol') {
+          const items = Array.from(node.querySelectorAll(':scope > li')).map(li => Array.from(li.childNodes).map(inlineNodeToMarkdown).join(''));
+          model.push({ type: 'list', ordered: tag === 'ol', items });
+        } else {
+          model.push({ type: 'paragraph', text: Array.from(node.childNodes).map(inlineNodeToMarkdown).join('') });
+        }
+      });
+      return model;
+    }
+
+    function markdownToNormalizedModel(markdown) {
+      const lines = markdown.replace(/\r\n?/g, '\n').split('\n');
+      const model = [];
+      let i = 0;
+      const flushParagraph = (buffer) => {
+        if (buffer.length) model.push({ type: 'paragraph', text: buffer.join(' ') });
+      };
+      while (i < lines.length) {
+        const line = lines[i];
+        if (!line.trim()) { i += 1; continue; }
+        const heading = line.match(/^(#{1,6})\s+(.+)$/);
+        if (heading) { model.push({ type: 'heading', level: heading[1].length, text: heading[2] }); i += 1; continue; }
+        if (/^(-{3,}|\*{3,}|_{3,})$/.test(line.trim())) { model.push({ type: 'hr' }); i += 1; continue; }
+        if (line.startsWith('```')) {
+          const buf = []; i += 1;
+          while (i < lines.length && !lines[i].startsWith('```')) { buf.push(lines[i]); i += 1; }
+          if (i < lines.length) i += 1;
+          model.push({ type: 'code', text: buf.join('\n') });
+          continue;
+        }
+        if (/^>\s?/.test(line)) { model.push({ type: 'blockquote', text: line.replace(/^>\s?/, '') }); i += 1; continue; }
+        if (/^\s*([-*+]\s+|\d+\.\s+)/.test(line)) {
+          const ordered = /^\s*\d+\.\s+/.test(line);
+          const items = [];
+          while (i < lines.length && /^\s*([-*+]\s+|\d+\.\s+)/.test(lines[i])) {
+            items.push(lines[i].replace(/^\s*([-*+]\s+|\d+\.\s+)/, ''));
+            i += 1;
+          }
+          model.push({ type: 'list', ordered, items });
+          continue;
+        }
+        const para = [];
+        while (i < lines.length && lines[i].trim() && !/^(#{1,6})\s+/.test(lines[i]) && !/^\s*([-*+]\s+|\d+\.\s+)/.test(lines[i]) && !lines[i].startsWith('```') && !/^>\s?/.test(lines[i])) {
+          para.push(lines[i]); i += 1;
+        }
+        flushParagraph(para);
+      }
+      return model;
+    }
+
+    function modelToMarkdown(model) {
+      return model.map((block) => {
+        if (block.type === 'heading') return `${'#'.repeat(block.level)} ${block.text}`;
+        if (block.type === 'paragraph') return block.text;
+        if (block.type === 'blockquote') return `> ${block.text}`;
+        if (block.type === 'code') return `\`\`\`\n${block.text}\n\`\`\``;
+        if (block.type === 'hr') return '---';
+        if (block.type === 'list') return block.items.map((it, idx) => block.ordered ? `${idx + 1}. ${it}` : `- ${it}`).join('\n');
+        return '';
+      }).join('\n\n');
+    }
+
+    function inlineMarkdownToHtml(text) {
+      return escapeHtml(text)
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    }
+
+    function modelToHtml(model) {
+      return model.map((block) => {
+        if (block.type === 'heading') return `<h${block.level}>${inlineMarkdownToHtml(block.text)}</h${block.level}>`;
+        if (block.type === 'paragraph') return `<p>${inlineMarkdownToHtml(block.text)}</p>`;
+        if (block.type === 'blockquote') return `<blockquote>${inlineMarkdownToHtml(block.text)}</blockquote>`;
+        if (block.type === 'code') return `<pre><code>${escapeHtml(block.text)}</code></pre>`;
+        if (block.type === 'hr') return '<hr>';
+        if (block.type === 'list') {
+          const tag = block.ordered ? 'ol' : 'ul';
+          return `<${tag}>${block.items.map((i) => `<li>${inlineMarkdownToHtml(i)}</li>`).join('')}</${tag}>`;
+        }
+        return '';
+      }).join('');
+    }
+
+    function getContentEditableSelectionOffsets(root) {
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0) return null;
+      const range = sel.getRangeAt(0);
+      if (!root.contains(range.startContainer) || !root.contains(range.endContainer)) return null;
+      const preStart = range.cloneRange();
+      preStart.selectNodeContents(root);
+      preStart.setEnd(range.startContainer, range.startOffset);
+      const preEnd = range.cloneRange();
+      preEnd.selectNodeContents(root);
+      preEnd.setEnd(range.endContainer, range.endOffset);
+      return { start: preStart.toString().length, end: preEnd.toString().length };
+    }
+
+    function setContentEditableSelectionOffsets(root, start, end) {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      let node;
+      let idx = 0;
+      let startNode = null, endNode = null, startOffset = 0, endOffset = 0;
+      while ((node = walker.nextNode())) {
+        const next = idx + node.textContent.length;
+        if (!startNode && start <= next) { startNode = node; startOffset = Math.max(0, start - idx); }
+        if (!endNode && end <= next) { endNode = node; endOffset = Math.max(0, end - idx); break; }
+        idx = next;
+      }
+      if (!startNode || !endNode) return;
+      const range = document.createRange();
+      range.setStart(startNode, startOffset);
+      range.setEnd(endNode, endOffset);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+
+    function showConflict() {
+      conflictBanner.classList.add('show');
+      clearTimeout(bannerTimer);
+      bannerTimer = setTimeout(() => conflictBanner.classList.remove('show'), 1800);
+    }
+
+    function registerEdit(pane) {
+      const now = Date.now();
+      if (lastEdit.pane && lastEdit.pane !== pane && now - lastEdit.at < 700) showConflict();
+      lastEdit = { pane, at: now };
+    }
+
+    function syncRichToMarkdown() {
+      const model = htmlToNormalizedModel(richEditor.innerHTML);
+      const nextMarkdown = modelToMarkdown(model);
+      const focused = document.activeElement === markdownPane;
+      const sel = { start: markdownPane.selectionStart, end: markdownPane.selectionEnd };
+      suppressMarkdownInput = true;
+      markdownPane.value = nextMarkdown;
+      suppressMarkdownInput = false;
+      if (focused) markdownPane.setSelectionRange(sel.start, sel.end);
+    }
+
+    function syncMarkdownToRich() {
+      const model = markdownToNormalizedModel(markdownPane.value);
+      const nextHtml = modelToHtml(model);
+      const focused = document.activeElement === richEditor;
+      const sel = getContentEditableSelectionOffsets(richEditor);
+      suppressRichInput = true;
+      richEditor.innerHTML = nextHtml || '<p></p>';
+      suppressRichInput = false;
+      if (focused && sel) {
+        richEditor.focus();
+        setContentEditableSelectionOffsets(richEditor, sel.start, sel.end);
+      }
+    }
+
+    richEditor.addEventListener('input', () => {
+      if (suppressRichInput) return;
+      registerEdit('rich');
+      if (liveSyncToggle.checked) syncRichToMarkdown();
+    });
+
+    markdownPane.addEventListener('input', () => {
+      if (suppressMarkdownInput) return;
+      registerEdit('markdown');
+      if (liveSyncToggle.checked) syncMarkdownToRich();
+    });
+
+    syncFromRichBtn.addEventListener('click', syncRichToMarkdown);
+    syncFromMarkdownBtn.addEventListener('click', syncMarkdownToRich);
+
+    syncRichToMarkdown();
+  </script>
+</body>
+</html>
