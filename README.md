@@ -1,29 +1,33 @@
 # Md.converter
-The most beautiful, simple, and private way to convert markdown to formatted text. One file, zero complexity, instant results.
+A private-first dual-way editor for markdown ↔ rich text sync with one file, zero complexity, and instant results.
 
 # MVP Document: Markdown to Formatted Text Converter
 
 ## Product Overview
 
-A minimalist, single-page web tool that converts markdown syntax into beautifully formatted text with instant preview. Designed with Jony Ive-inspired aesthetics: clean, precise, and focused on the essential.
+A minimalist, single-page web tool for dual-way editing between markdown and rich text. Users can work in either pane and keep content aligned through live sync or explicit manual sync controls. The experience remains privacy-first by default, with optional anonymous analytics only after opt-in. Designed with Jony Ive-inspired aesthetics: clean, precise, and focused on the essential.
 
 ---
 
 ## Core Features
 
-### 1. Markdown Input Panel
-- **Paste functionality**: Quick paste button for instant markdown input
-- **Live text area**: Real-time markdown editing
-- **Clear button**: Reset input with single click
-- **Character count**: Displays current input length
+### 1. Dual-Way Markdown ↔ Rich Text Editing
+- **Two editable panes**: Work in markdown or rich text at any time
+- **Model-based conversion**: Content stays structurally aligned across both formats
+- **Rich formatting support**: Headings, bold, italic, lists, links, code blocks, blockquotes, and rules
 
-### 2. Formatted Output Panel
-- **Live preview**: Instant conversion as you type
-- **Copy functionality**: One-click copy of formatted output
-- **Rich formatting support**: Headers, bold, italic, lists, links, code blocks, blockquotes
-- **Responsive display**: Adapts to content length
+### 2. Sync Controls: Live + Manual
+- **Live sync toggle**: Keep both panes in continuous sync while typing
+- **Manual sync buttons**: Push updates Rich → Markdown or Markdown → Rich on demand
+- **Conflict signaling**: Warns when rapid edits happen in both panes
+- **Large-document workflow**: Manual sync remains available when users prefer explicit control
 
-### 3. Markdown Support
+### 3. Privacy-First by Default
+- **Local-first behavior**: Editing and conversion happen in-browser
+- **Optional analytics opt-in**: Anonymous usage metrics are disabled unless explicitly enabled
+- **User-visible telemetry summary**: Shows what counters are tracked when opt-in is on
+
+### 4. Markdown Support
 - **Headers**: H1-H6 (`#` to `######`)
 - **Text styling**: Bold (`**text**`), Italic (`*text*`)
 - **Lists**: Unordered (`-`, `*`) and ordered (`1.`, `2.`)
@@ -33,21 +37,21 @@ A minimalist, single-page web tool that converts markdown syntax into beautifull
 - **Horizontal rules**: `---` or `***`
 - **Strikethrough**: `~~text~~`
 
-### 4. Dark Mode ✨
+### 5. Dark Mode ✨
 - **Toggle button**: Instant theme switching
 - **Persistent**: Theme preference saved in browser
 - **Smooth transition**: Animated color changes
 - **Keyboard shortcut**: Ctrl+Shift+D
 - **Refined dark palette**: Carefully balanced contrast
 
-### 5. Syntax Guide ✨
+### 6. Syntax Guide ✨
 - **Interactive modal**: Pop-up reference guide
 - **Organized categories**: Headers, text styling, lists, links, code, other
 - **Live examples**: Shows markdown and result side-by-side
 - **Quick access**: Click button or press `?` key
 - **Mobile optimized**: Stacked layout on small screens
 
-### 6. Keyboard Shortcuts ✨
+### 7. Keyboard Shortcuts ✨
 - **Copy output**: Ctrl+Shift+C
 - **Paste input**: Ctrl+Shift+V
 - **Clear input**: Ctrl+Shift+X
@@ -57,7 +61,7 @@ A minimalist, single-page web tool that converts markdown syntax into beautifull
 - **Close modals**: Esc
 - **Shortcuts modal**: Dedicated help screen
 
-### 7. Templates ✨
+### 8. Templates ✨
 Six professional pre-built templates:
 - **Blog Post**: Article structure with intro/points/conclusion
 - **README**: Project documentation template
@@ -142,11 +146,10 @@ Six professional pre-built templates:
 4. Right panel shows formatted preview
 
 ### Conversion Flow
-1. **Input**: User pastes or types markdown in left panel
-2. **Processing**: Instant conversion happens automatically
-3. **Preview**: Formatted output appears in right panel
-4. **Copy**: Click "Copy Output" to get formatted text
-5. **Reset**: Click paste icon to clear and start fresh
+1. **Edit**: User types in either markdown or rich text pane
+2. **Sync**: Live sync keeps both panes aligned (or use manual sync buttons)
+3. **Review**: User validates output in both representations
+4. **Copy**: Click "Copy Markdown" when needed for export
 
 ### Edge Cases
 - Empty input: Shows placeholder text
@@ -227,7 +230,7 @@ Six professional pre-built templates:
 - **Portable**: Single HTML file vs. web apps requiring internet
 
 ### Unique Value Proposition
-"The most beautiful, simple, and private way to convert markdown to formatted text. One file, zero complexity, instant results."
+"A private-first dual-way editor for markdown ↔ rich text sync with one file, zero complexity, and instant results."
 
 ---
 
