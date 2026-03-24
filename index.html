@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dual-Way Markdown ↔ Rich Text Editor</title>
+  <title>Markdown ↔ Rich Text Editor</title>
   <meta name="description" content="Dual-way markdown ↔ rich text editor with live sync, manual sync controls, and privacy-first optional analytics opt-in." />
   <link rel="canonical" href="https://mdconverter.app/" />
   <meta property="og:title" content="Dual-Way Markdown ↔ Rich Text Editor" />
@@ -12,373 +12,858 @@
   <meta property="og:url" content="https://mdconverter.app/" />
   <meta property="og:image" content="https://mdconverter.app/og-image.png" />
   <style>
-    :root { color-scheme: light dark; }
-    body { margin: 0; font-family: Inter, system-ui, sans-serif; background: #f5f7fb; color: #111827; }
-    .app { max-width: 1200px; margin: 0 auto; padding: 20px; }
-    .controls { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
-    .btn { border: 1px solid #cbd5e1; background: #fff; border-radius: 10px; padding: 8px 12px; cursor: pointer; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-    .panel { background: #fff; border: 1px solid #dbe2ef; border-radius: 12px; padding: 12px; min-height: 70vh; display: flex; flex-direction: column; }
-    .panel h2 { margin: 0 0 10px; font-size: 16px; }
-    #richEditor {
-      flex: 1; border: 1px solid #d1d5db; border-radius: 10px; padding: 12px; overflow: auto; line-height: 1.5;
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+
+    :root {
+      --bg:         #f4f5f7;
+      --surface:    #ffffff;
+      --surface2:   #f8f9fb;
+      --surface3:   #f0f2f6;
+      --border:     #e4e7ef;
+      --border2:    #d0d5e4;
+      --text:       #0f1623;
+      --text2:      #5a6278;
+      --text3:      #9aa0b4;
+      --accent:     #2563eb;
+      --accent-h:   #1d4ed8;
+      --accent-bg:  #eff4ff;
+      --accent-txt: #1e40af;
+      --green:      #16a34a;
+      --green-bg:   #f0fdf4;
+      --amber:      #d97706;
+      --amber-bg:   #fffbeb;
+      --red:        #dc2626;
+      --red-bg:     #fef2f2;
+      --radius:     10px;
+      --radius-sm:  6px;
+      --mono:       'IBM Plex Mono', ui-monospace, monospace;
+      --sans:       'IBM Plex Sans', system-ui, sans-serif;
+      --topbar-h:   52px;
+      --statusbar-h:32px;
+      --shadow:     0 1px 2px rgba(0,0,0,.06), 0 2px 8px rgba(0,0,0,.05);
+      --shadow-lg:  0 8px 32px rgba(0,0,0,.12);
     }
-    #richEditor:focus, #markdownPane:focus { outline: 2px solid #60a5fa; outline-offset: 1px; }
-    #markdownPane { flex: 1; resize: none; border: 1px solid #d1d5db; border-radius: 10px; padding: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; line-height: 1.5; }
-    #conflictBanner { display: none; margin-bottom: 12px; background: #fef3c7; border: 1px solid #f59e0b; color: #92400e; padding: 10px 12px; border-radius: 10px; }
-    #conflictBanner.show { display: block; }
-    .muted { color: #6b7280; font-size: 12px; }
-    #analyticsSummary { font-size: 12px; color: #4b5563; }
-    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } .panel { min-height: 40vh; } }
+    [data-theme="dark"] {
+      --bg:         #0b0e14;
+      --surface:    #131720;
+      --surface2:   #181d28;
+      --surface3:   #1e2435;
+      --border:     #252d3d;
+      --border2:    #2e3850;
+      --text:       #e8edf8;
+      --text2:      #7e8ba8;
+      --text3:      #404d66;
+      --accent:     #4f8ef7;
+      --accent-h:   #6ba0f8;
+      --accent-bg:  #0f1e3d;
+      --accent-txt: #93b8fb;
+      --green:      #22c55e;
+      --green-bg:   #052e16;
+      --amber:      #f59e0b;
+      --amber-bg:   #1c1407;
+      --red:        #f87171;
+      --red-bg:     #1c0a0a;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      transition: background .2s, color .2s;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* APP SHELL */
+    .app {
+      display: grid;
+      grid-template-rows: var(--topbar-h) 1fr var(--statusbar-h);
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* TOP BAR */
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 14px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      z-index: 10;
+      flex-shrink: 0;
+    }
+    .topbar-logo {
+      font-size: 14px; font-weight: 600; color: var(--text);
+      letter-spacing: -.4px; margin-right: 8px; white-space: nowrap;
+    }
+    .topbar-logo span { color: var(--accent); }
+    .topbar-sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; flex-shrink: 0; }
+    .topbar-spacer { flex: 1; }
+
+    .view-group {
+      display: flex; background: var(--surface3);
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 2px; gap: 1px;
+    }
+    .view-btn {
+      padding: 4px 10px; font-size: 12px; font-family: var(--sans); font-weight: 500;
+      color: var(--text2); background: transparent; border: none; border-radius: 4px;
+      cursor: pointer; white-space: nowrap; transition: all .15s;
+    }
+    .view-btn:hover { color: var(--text); background: var(--surface); }
+    .view-btn.active { background: var(--surface); color: var(--accent); box-shadow: var(--shadow); }
+
+    .btn {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 5px 12px; font-size: 12.5px; font-family: var(--sans); font-weight: 500;
+      color: var(--text2); background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); cursor: pointer; white-space: nowrap;
+      transition: all .15s; line-height: 1;
+    }
+    .btn:hover { color: var(--text); border-color: var(--border2); background: var(--surface3); }
+    .btn:active { transform: scale(.97); }
+    .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .btn.primary:hover { background: var(--accent-h); border-color: var(--accent-h); color: #fff; }
+    .btn.icon-only { padding: 5px 7px; }
+
+    .dropdown { position: relative; }
+    .dropdown-menu {
+      display: none; position: absolute; top: calc(100% + 5px); right: 0;
+      min-width: 180px; background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); box-shadow: var(--shadow-lg); z-index: 200;
+      overflow: hidden; padding: 4px;
+    }
+    .dropdown-menu.open { display: block; }
+    .dropdown-item {
+      display: flex; align-items: center; gap: 9px; padding: 8px 12px;
+      font-size: 13px; font-family: var(--sans); color: var(--text);
+      cursor: pointer; border-radius: var(--radius-sm); transition: background .1s;
+    }
+    .dropdown-item:hover { background: var(--accent-bg); color: var(--accent); }
+    .dropdown-item-hint { font-size: 11px; color: var(--text3); margin-left: auto; }
+
+    .settings-panel {
+      display: none; position: absolute; top: calc(100% + 5px); right: 0;
+      width: 240px; background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); box-shadow: var(--shadow-lg); z-index: 200; padding: 12px;
+    }
+    .settings-panel.open { display: block; }
+    .settings-title {
+      font-size: 10.5px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: .06em; color: var(--text3); margin-bottom: 10px;
+    }
+    .settings-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 7px 0; font-size: 13px; color: var(--text2);
+      border-bottom: 1px solid var(--border);
+    }
+    .settings-row:last-child { border-bottom: none; }
+    .settings-row label { display: flex; align-items: center; gap: 7px; cursor: pointer; }
+    .settings-row input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
+
+    /* WORK AREA */
+    .work-area {
+      display: grid; grid-template-columns: 1fr 1fr;
+      overflow: hidden; position: relative;
+    }
+    .work-area[data-view="preview"]  { grid-template-columns: 0px 1fr; }
+    .work-area[data-view="markdown"] { grid-template-columns: 1fr 0px; }
+    .work-area[data-view="rich"]     { grid-template-columns: 0px 1fr; }
+    .work-area[data-view="preview"]  .pane-md,
+    .work-area[data-view="rich"]     .pane-md  { overflow: hidden; }
+    .work-area[data-view="markdown"] .pane-rich { overflow: hidden; }
+
+    /* PANES */
+    .pane { display: flex; flex-direction: column; overflow: hidden; border-right: 1px solid var(--border); }
+    .pane:last-child { border-right: none; }
+    .pane-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 14px; height: 36px; border-bottom: 1px solid var(--border);
+      background: var(--surface2); flex-shrink: 0;
+    }
+    .pane-label {
+      font-size: 11px; font-weight: 600; letter-spacing: .05em;
+      text-transform: uppercase; color: var(--text3);
+    }
+    .pane-actions { display: flex; gap: 6px; align-items: center; }
+    .pane-copy-btn {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 3px 9px; font-size: 11.5px; font-family: var(--sans); font-weight: 500;
+      color: var(--text2); background: transparent; border: 1px solid var(--border);
+      border-radius: 4px; cursor: pointer; transition: all .15s;
+    }
+    .pane-copy-btn:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
+    .pane-copy-btn.success { color: var(--green); border-color: var(--green); background: var(--green-bg); }
+    .pane-push-btn {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 3px 8px; font-size: 11px; font-family: var(--sans); font-weight: 500;
+      color: var(--text3); background: transparent; border: 1px solid var(--border);
+      border-radius: 4px; cursor: pointer; transition: all .15s;
+    }
+    .pane-push-btn:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
+
+    /* Rich editor */
+    #richEditor {
+      flex: 1; padding: 28px 32px; overflow-y: auto; outline: none;
+      font-family: var(--sans); font-size: 15.5px; line-height: 1.75;
+      color: var(--text); background: var(--surface); caret-color: var(--accent);
+    }
+    #richEditor h1 { font-size: 1.8em; font-weight: 600; margin: .2em 0 .5em; line-height: 1.25; }
+    #richEditor h2 { font-size: 1.4em; font-weight: 600; margin: 1em 0 .4em; line-height: 1.3; }
+    #richEditor h3 { font-size: 1.15em; font-weight: 600; margin: .9em 0 .35em; }
+    #richEditor h4,#richEditor h5,#richEditor h6 { font-weight: 600; margin: .8em 0 .3em; }
+    #richEditor p { margin: .5em 0; }
+    #richEditor ul,#richEditor ol { padding-left: 1.6em; margin: .5em 0; }
+    #richEditor li { margin: .25em 0; }
+    #richEditor blockquote {
+      border-left: 3px solid var(--accent); padding: .5em 1.2em; margin: .75em 0;
+      background: var(--accent-bg); border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+      color: var(--accent-txt); font-style: italic;
+    }
+    #richEditor pre {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 14px 18px;
+      font-family: var(--mono); font-size: 13px; overflow-x: auto; margin: .75em 0;
+    }
+    #richEditor code:not(pre code) {
+      font-family: var(--mono); font-size: .84em;
+      background: var(--surface3); border: 1px solid var(--border);
+      padding: 1px 5px; border-radius: 4px;
+    }
+    #richEditor a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+    #richEditor hr { border: none; border-top: 1px solid var(--border); margin: 1.5em 0; }
+    #richEditor strong { font-weight: 600; }
+    #richEditor del { text-decoration: line-through; color: var(--text3); }
+
+    /* Markdown pane */
+    .pane-md { background: var(--surface2); }
+    .md-body { flex: 1; position: relative; overflow: hidden; display: flex; flex-direction: column; }
+    #markdownPane {
+      flex: 1; resize: none; border: none; outline: none;
+      padding: 28px 32px; font-family: var(--mono); font-size: 13.5px;
+      line-height: 1.85; background: transparent; color: var(--text);
+      tab-size: 2; overflow-y: auto; white-space: pre-wrap;
+      word-break: break-word; position: relative; z-index: 1;
+    }
+    #mdErrorOverlay {
+      position: absolute; inset: 0; padding: 28px 32px;
+      font-family: var(--mono); font-size: 13.5px; line-height: 1.85;
+      pointer-events: none; white-space: pre-wrap; word-break: break-word;
+      overflow: hidden; color: transparent; z-index: 0;
+    }
+    .md-err { background: rgba(220,38,38,.1); border-bottom: 1.5px solid var(--red); }
+
+    /* Conflict banner */
+    #conflictBanner {
+      position: absolute; top: 36px; left: 0; right: 0; z-index: 50;
+      display: none; align-items: center; gap: 8px;
+      padding: 8px 16px; font-size: 12.5px;
+      background: var(--amber-bg); border-bottom: 1px solid var(--amber); color: var(--amber);
+    }
+    #conflictBanner.show { display: flex; }
+
+    /* STATUS BAR */
+    .statusbar {
+      display: flex; align-items: center;
+      padding: 0 14px; background: var(--surface); border-top: 1px solid var(--border);
+      font-size: 11.5px; color: var(--text3); overflow: hidden; flex-shrink: 0;
+    }
+    .sb-item {
+      display: flex; align-items: center; gap: 5px;
+      padding: 0 10px; height: 100%; border-right: 1px solid var(--border); white-space: nowrap;
+    }
+    .sb-item:first-child { padding-left: 0; }
+    .sb-item:last-child { border-right: none; }
+    .sb-spacer { flex: 1; }
+    .sdot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--text3); flex-shrink: 0; transition: background .3s;
+    }
+    .sdot.live   { background: var(--green); }
+    .sdot.error  { background: var(--red); }
+    .sdot.saving { background: var(--amber); animation: pulse 1s infinite; }
+    .sdot.saved  { background: var(--green); }
+    @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.35} }
+
+    /* Version Drawer */
+    #versionDrawer {
+      position: fixed; top: 0; right: 0; bottom: 0; width: 300px;
+      background: var(--surface); border-left: 1px solid var(--border);
+      box-shadow: var(--shadow-lg); z-index: 300;
+      display: flex; flex-direction: column;
+      transform: translateX(100%); transition: transform .22s ease;
+    }
+    #versionDrawer.open { transform: translateX(0); }
+    .vd-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 16px; height: var(--topbar-h); border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .vd-title { font-size: 13px; font-weight: 600; }
+    .vd-list { flex: 1; overflow-y: auto; padding: 8px; }
+    .vd-item {
+      padding: 10px 12px; border-radius: var(--radius-sm); cursor: pointer;
+      border: 1px solid transparent; margin-bottom: 4px; transition: all .12s;
+    }
+    .vd-item:hover { background: var(--surface2); border-color: var(--border); }
+    .vd-item.current { border-color: var(--accent); background: var(--accent-bg); }
+    .vd-name { font-size: 12.5px; font-weight: 500; color: var(--text); }
+    .vd-meta { font-size: 11px; color: var(--text3); margin-top: 3px; }
+    .vd-preview { font-size: 11.5px; color: var(--text2); font-family: var(--mono); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .vd-empty { text-align: center; padding: 40px 16px; font-size: 13px; color: var(--text3); line-height: 1.6; }
+    .vd-footer { padding: 12px; border-top: 1px solid var(--border); flex-shrink: 0; display: flex; gap: 8px; }
+
+    /* Toast */
+    #toast {
+      position: fixed; bottom: calc(var(--statusbar-h) + 12px); left: 50%;
+      transform: translateX(-50%) translateY(6px);
+      background: var(--text); color: var(--surface);
+      padding: 7px 16px; border-radius: 20px; font-size: 12.5px; font-weight: 500;
+      opacity: 0; transition: all .2s; z-index: 9999; pointer-events: none; white-space: nowrap;
+    }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    /* Fullscreen */
+    .app.fullscreen { grid-template-rows: 0 1fr var(--statusbar-h); }
+    .app.fullscreen .topbar { display: none; }
+
+    /* Scrollbars */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+    @media (max-width: 700px) {
+      .work-area { grid-template-columns: 1fr !important; }
+      .pane-rich { display: none; }
+      .work-area[data-view="preview"] .pane-md,
+      .work-area[data-view="rich"] .pane-md { display: none; }
+      .work-area[data-view="preview"] .pane-rich,
+      .work-area[data-view="rich"] .pane-rich { display: flex; }
+      #richEditor, #markdownPane { padding: 16px 18px; }
+    }
   </style>
 </head>
 <body>
-  <div class="app">
-    <h1>Dual Markdown / Rich Text Editor</h1>
-    <div id="conflictBanner">⚠️ You edited both panes quickly. Live sync keeps the latest change, so use manual sync buttons if you want to pick a direction explicitly.</div>
-    <div class="controls">
-      <label><input id="liveSyncToggle" type="checkbox" checked /> Live sync</label>
-      <button class="btn" id="syncFromRichBtn">Sync Rich → Markdown</button>
-      <button class="btn" id="syncFromMarkdownBtn">Sync Markdown → Rich</button>
-      <button class="btn" id="copyMarkdownBtn">Copy Markdown</button>
-      <label><input id="analyticsOptIn" type="checkbox" /> Share anonymous usage metrics</label>
-      <span id="analyticsSummary" aria-live="polite"></span>
-      <span class="muted">Manual sync buttons are useful for very large documents.</span>
+
+<div id="toast"></div>
+
+<!-- Version History Drawer -->
+<div id="versionDrawer">
+  <div class="vd-header">
+    <span class="vd-title">Version History</span>
+    <button class="btn icon-only" id="closeVersionDrawer">✕</button>
+  </div>
+  <div class="vd-list" id="versionList">
+    <div class="vd-empty">No versions yet.<br>Saved every 2 minutes while you edit.</div>
+  </div>
+  <div class="vd-footer">
+    <button class="btn" style="flex:1" id="saveVersionNowBtn">Save snapshot</button>
+    <button class="btn" id="clearVersionsBtn">Clear all</button>
+  </div>
+</div>
+
+<!-- App -->
+<div class="app" id="appRoot">
+
+  <!-- TOP BAR: Logo | Views | — spacer — | Copy MD | Copy HTML | Export▾ | History | Fullscreen | Theme | Settings▾ -->
+  <div class="topbar">
+    <div class="topbar-logo">md<span>.</span>editor</div>
+    <div class="topbar-sep"></div>
+
+    <div class="view-group">
+      <button class="view-btn active" data-view="split">Split</button>
+      <button class="view-btn" data-view="markdown">Markdown</button>
+      <button class="view-btn" data-view="preview">Preview</button>
+      <button class="view-btn" data-view="rich">Rich Text</button>
     </div>
 
-    <div class="grid">
-      <section class="panel">
-        <h2>Rich Text (editable)</h2>
-        <div id="richEditor" contenteditable="true"><h1>Welcome</h1><p>Edit this rich text pane or the markdown pane. They stay in sync.</p><ul><li>Bold, italic, links, lists</li><li>Headings and blockquotes</li></ul></div>
-      </section>
-      <section class="panel">
-        <h2>Markdown (editable)</h2>
-        <textarea id="markdownPane" spellcheck="false"></textarea>
-      </section>
+    <div class="topbar-spacer"></div>
+
+    <!-- Primary: Copy -->
+    <button class="btn" id="copyMarkdownBtn">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="5" y="5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      Copy Markdown
+    </button>
+    <button class="btn" id="copyRichBtn">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="5" y="5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      Copy HTML
+    </button>
+
+    <!-- Primary: Export -->
+    <div class="dropdown" id="exportDropdown">
+      <button class="btn primary" id="exportBtn">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 2v9M4 8l4 4 4-4M2 13h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Export
+        <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M2 3.5l3 3 3-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="dropdown-menu" id="exportMenu">
+        <div class="dropdown-item" id="downloadMd">
+          <span>📄</span><span style="font-weight:500">Markdown</span><span class="dropdown-item-hint">.md</span>
+        </div>
+        <div class="dropdown-item" id="downloadHtml">
+          <span>🌐</span><span style="font-weight:500">HTML document</span><span class="dropdown-item-hint">.html</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="topbar-sep"></div>
+
+    <!-- Secondary: History, Fullscreen, Theme -->
+    <button class="btn icon-only" id="openVersionDrawer" title="Version history">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.25" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v3.25L10.5 10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <button class="btn icon-only" id="fullscreenBtn" title="Fullscreen">
+      <svg id="fsIcon" width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <button class="btn icon-only" id="themeBtn" title="Toggle theme">
+      <svg id="themeIcon" width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 1v2M8 13v2M1 8h2m10 0h2M3.22 3.22l1.42 1.42m6.72 6.72 1.42 1.42M3.22 12.78l1.42-1.42m6.72-6.72 1.42-1.42M11 8a3 3 0 1 1-6 0 3 3 0 0 1 6 0z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+    </button>
+
+    <!-- Tertiary: Settings (hidden behind gear) -->
+    <div class="dropdown" id="settingsDropdown">
+      <button class="btn icon-only" id="settingsBtn" title="Settings">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.4"/><path d="M8 1.5v1.2m0 10.6v1.2M1.5 8h1.2m10.6 0h1.2m-2.57-4.6-.85.85M5.52 10.63l-.85.85m0-7.06.85.85m5.11 5.11.85.85" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      </button>
+      <div class="settings-panel" id="settingsPanel">
+        <div class="settings-title">Settings</div>
+        <div class="settings-row">
+          <label><input id="liveSyncToggle" type="checkbox" checked /> Live sync</label>
+        </div>
+        <div class="settings-row">
+          <label><input id="analyticsOptIn" type="checkbox" /> Share anonymous metrics</label>
+        </div>
+        <div class="settings-row" id="analyticsSummaryRow" style="display:none">
+          <span id="analyticsSummary" style="font-size:11px;color:var(--text3)"></span>
+        </div>
+      </div>
     </div>
   </div>
 
-  <script>
-    const richEditor = document.getElementById('richEditor');
-    const markdownPane = document.getElementById('markdownPane');
-    const liveSyncToggle = document.getElementById('liveSyncToggle');
-    const syncFromRichBtn = document.getElementById('syncFromRichBtn');
-    const syncFromMarkdownBtn = document.getElementById('syncFromMarkdownBtn');
-    const copyMarkdownBtn = document.getElementById('copyMarkdownBtn');
-    const analyticsOptIn = document.getElementById('analyticsOptIn');
-    const analyticsSummary = document.getElementById('analyticsSummary');
-    const conflictBanner = document.getElementById('conflictBanner');
+  <!-- WORK AREA (90% of screen height) -->
+  <div class="work-area" data-view="split" id="workArea">
 
-    const ANALYTICS_STORAGE_KEY = 'mdc.analytics.v1';
-    const ANALYTICS_ENDPOINT = '';
+    <div id="conflictBanner"></div>
 
-    let suppressRichInput = false;
-    let suppressMarkdownInput = false;
-    let lastEdit = { pane: null, at: 0 };
-    let bannerTimer;
-    let richToMarkdownTimer = null;
-    let markdownToRichTimer = null;
+    <!-- Markdown pane -->
+    <div class="pane pane-md">
+      <div class="pane-header">
+        <span class="pane-label">Markdown</span>
+        <div class="pane-actions">
+          <button class="pane-copy-btn" id="paneCopyMd">
+            <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><rect x="5" y="5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            Copy
+          </button>
+          <button class="pane-push-btn" id="syncMdToRichBtn" title="Push Markdown → Rich Text">Push →</button>
+        </div>
+      </div>
+      <div class="md-body">
+        <textarea id="markdownPane" spellcheck="false" placeholder="Write or paste Markdown here…"></textarea>
+        <div id="mdErrorOverlay" aria-hidden="true"></div>
+      </div>
+    </div>
 
-    const LIVE_SYNC_DEBOUNCE_MS = 180;
+    <!-- Rich text pane -->
+    <div class="pane pane-rich">
+      <div class="pane-header">
+        <span class="pane-label">Rich Text</span>
+        <div class="pane-actions">
+          <button class="pane-copy-btn" id="paneCopyRich">
+            <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><rect x="5" y="5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            Copy HTML
+          </button>
+          <button class="pane-push-btn" id="syncRichToMdBtn" title="Push Rich Text → Markdown">← Push</button>
+        </div>
+      </div>
+      <div id="richEditor" contenteditable="true"></div>
+    </div>
 
-    function loadAnalyticsState() {
-      try {
-        const parsed = JSON.parse(localStorage.getItem(ANALYTICS_STORAGE_KEY) || '{}');
-        return {
-          optedIn: Boolean(parsed.optedIn),
-          pageLoads: Number(parsed.pageLoads || 0),
-          conversions: Number(parsed.conversions || 0),
-          copyActions: Number(parsed.copyActions || 0)
-        };
-      } catch (_) {
-        return { optedIn: false, pageLoads: 0, conversions: 0, copyActions: 0 };
-      }
+  </div>
+
+  <!-- STATUS BAR: feedback, stats, cursor -->
+  <div class="statusbar">
+    <div class="sb-item">
+      <div class="sdot live" id="syncDot"></div>
+      <span id="syncLabel">Live sync</span>
+    </div>
+    <div class="sb-item">
+      <div class="sdot" id="saveDot"></div>
+      <span id="saveLabel">Auto-save</span>
+    </div>
+    <div class="sb-item" id="errorStatus" style="display:none">
+      <div class="sdot error"></div>
+      <span id="errorLabel">0 errors</span>
+    </div>
+    <div class="sb-spacer"></div>
+    <div class="sb-item" id="cursorStatus">Ln 1, Col 1</div>
+    <div class="sb-item" id="wordsStat">0 words</div>
+    <div class="sb-item" id="charsStat">0 chars</div>
+    <div class="sb-item" id="readStat">0 min read</div>
+  </div>
+
+</div>
+
+<script>
+/* ── DOM ── */
+const richEditor       = document.getElementById('richEditor');
+const markdownPane     = document.getElementById('markdownPane');
+const liveSyncToggle   = document.getElementById('liveSyncToggle');
+const analyticsOptIn   = document.getElementById('analyticsOptIn');
+const analyticsSummary = document.getElementById('analyticsSummary');
+const analyticsSummaryRow = document.getElementById('analyticsSummaryRow');
+const conflictBanner   = document.getElementById('conflictBanner');
+const mdErrorOverlay   = document.getElementById('mdErrorOverlay');
+const workArea         = document.getElementById('workArea');
+const appRoot          = document.getElementById('appRoot');
+const toast            = document.getElementById('toast');
+const syncDot  = document.getElementById('syncDot');
+const syncLabel= document.getElementById('syncLabel');
+const saveDot  = document.getElementById('saveDot');
+const saveLabel= document.getElementById('saveLabel');
+const errorStatus = document.getElementById('errorStatus');
+const errorLabel  = document.getElementById('errorLabel');
+const cursorStatus= document.getElementById('cursorStatus');
+const wordsStat   = document.getElementById('wordsStat');
+const charsStat   = document.getElementById('charsStat');
+const readStat    = document.getElementById('readStat');
+const versionList = document.getElementById('versionList');
+const versionDrawer = document.getElementById('versionDrawer');
+
+/* ── Toast ── */
+let toastT;
+function showToast(msg, dur=1600){
+  toast.textContent=msg; toast.classList.add('show');
+  clearTimeout(toastT); toastT=setTimeout(()=>toast.classList.remove('show'),dur);
+}
+
+/* ── Theme ── */
+const pDark=window.matchMedia('(prefers-color-scheme: dark)').matches;
+const sTheme=localStorage.getItem('mdc.theme')||(pDark?'dark':'light');
+document.documentElement.setAttribute('data-theme',sTheme);
+setThemeIcon(sTheme);
+function setThemeIcon(t){
+  document.getElementById('themeIcon').innerHTML=t==='dark'
+    ?'<path d="M13 9.5a5.5 5.5 0 1 1-7-7 7 7 0 1 0 7 7z" fill="currentColor"/>'
+    :'<path d="M8 1v2M8 13v2M1 8h2m10 0h2M3.22 3.22l1.42 1.42m6.72 6.72 1.42 1.42M3.22 12.78l1.42-1.42m6.72-6.72 1.42-1.42M11 8a3 3 0 1 1-6 0 3 3 0 0 1 6 0z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>';
+}
+document.getElementById('themeBtn').addEventListener('click',()=>{
+  const n=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';
+  document.documentElement.setAttribute('data-theme',n);
+  localStorage.setItem('mdc.theme',n); setThemeIcon(n);
+});
+
+/* ── Analytics ── */
+const AK='mdc.analytics.v1';
+let aS=(()=>{try{const p=JSON.parse(localStorage.getItem(AK)||'{}');return{optedIn:!!p.optedIn,pageLoads:+(p.pageLoads||0),conversions:+(p.conversions||0),copyActions:+(p.copyActions||0)};}catch(_){return{optedIn:false,pageLoads:0,conversions:0,copyActions:0};}})();
+function saveA(){localStorage.setItem(AK,JSON.stringify(aS));}
+function renderA(){
+  analyticsOptIn.checked=aS.optedIn;
+  if(aS.optedIn){analyticsSummaryRow.style.display='flex';analyticsSummary.textContent=`Loads:${aS.pageLoads} Conv:${aS.conversions} Copies:${aS.copyActions}`;}
+  else analyticsSummaryRow.style.display='none';
+}
+function trackA(e){if(!aS.optedIn)return;if(e==='page_load')aS.pageLoads++;if(e==='conversion')aS.conversions++;if(e==='copy_action')aS.copyActions++;saveA();renderA();}
+analyticsOptIn.addEventListener('change',()=>{aS.optedIn=analyticsOptIn.checked;saveA();renderA();if(aS.optedIn)trackA('page_load');});
+
+/* ── HTML escape ── */
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+/* ── Conversion ── */
+function nodeToMd(n){
+  if(n.nodeType===Node.TEXT_NODE)return n.textContent;
+  if(n.nodeType!==Node.ELEMENT_NODE)return '';
+  const c=Array.from(n.childNodes).map(nodeToMd).join('');
+  const t=n.tagName.toLowerCase();
+  if(t==='strong'||t==='b')return`**${c}**`;
+  if(t==='em'||t==='i')return`*${c}*`;
+  if(t==='code')return`\`${c}\``;
+  if(t==='del'||t==='s')return`~~${c}~~`;
+  if(t==='a')return`[${c}](${n.getAttribute('href')||'#'})`;
+  if(t==='br')return'\n';
+  return c;
+}
+function htmlToModel(html){
+  const doc=new DOMParser().parseFromString(`<div>${html}</div>`,'text/html');
+  const root=doc.body.firstElementChild; const m=[];
+  root.childNodes.forEach(n=>{
+    if(n.nodeType===Node.TEXT_NODE&&n.textContent.trim()){m.push({type:'p',text:n.textContent.trim()});return;}
+    if(n.nodeType!==Node.ELEMENT_NODE)return;
+    const t=n.tagName.toLowerCase();
+    const inline=()=>Array.from(n.childNodes).map(nodeToMd).join('');
+    if(/^h[1-6]$/.test(t))m.push({type:'h',level:+t[1],text:inline()});
+    else if(t==='p'||t==='div')m.push({type:'p',text:inline()});
+    else if(t==='blockquote')m.push({type:'bq',text:inline()});
+    else if(t==='pre')m.push({type:'code',text:n.textContent.replace(/\n$/, '')});
+    else if(t==='hr')m.push({type:'hr'});
+    else if(t==='ul'||t==='ol'){const items=Array.from(n.querySelectorAll(':scope > li')).map(li=>Array.from(li.childNodes).map(nodeToMd).join(''));m.push({type:'list',ordered:t==='ol',items});}
+    else m.push({type:'p',text:inline()});
+  });
+  return m;
+}
+function mdToModel(md){
+  const lines=md.replace(/\r\n?/g,'\n').split('\n'); const m=[]; let i=0;
+  while(i<lines.length){
+    const l=lines[i];
+    if(!l.trim()){i++;continue;}
+    const h=l.match(/^(#{1,6})\s+(.+)$/);
+    if(h){m.push({type:'h',level:h[1].length,text:h[2]});i++;continue;}
+    if(/^(-{3,}|\*{3,}|_{3,})$/.test(l.trim())){m.push({type:'hr'});i++;continue;}
+    if(l.startsWith('```')){const buf=[];i++;while(i<lines.length&&!lines[i].startsWith('```')){buf.push(lines[i]);i++;}if(i<lines.length)i++;m.push({type:'code',text:buf.join('\n')});continue;}
+    if(/^>\s?/.test(l)){m.push({type:'bq',text:l.replace(/^>\s?/,'')});i++;continue;}
+    if(/^\s*([-*+]\s+|\d+\.\s+)/.test(l)){
+      const ordered=/^\s*\d+\.\s+/.test(l); const items=[];
+      while(i<lines.length&&/^\s*([-*+]\s+|\d+\.\s+)/.test(lines[i])){items.push(lines[i].replace(/^\s*([-*+]\s+|\d+\.\s+)/,''));i++;}
+      m.push({type:'list',ordered,items});continue;
     }
+    const para=[];
+    while(i<lines.length&&lines[i].trim()&&!/^(#{1,6})\s+/.test(lines[i])&&!/^\s*([-*+]\s+|\d+\.\s+)/.test(lines[i])&&!lines[i].startsWith('```')&&!/^>\s?/.test(lines[i])){para.push(lines[i]);i++;}
+    if(para.length)m.push({type:'p',text:para.join(' ')});
+  }
+  return m;
+}
+function modelToMd(m){
+  return m.map(b=>{
+    if(b.type==='h')return`${'#'.repeat(b.level)} ${b.text}`;
+    if(b.type==='p')return b.text;
+    if(b.type==='bq')return`> ${b.text}`;
+    if(b.type==='code')return`\`\`\`\n${b.text}\n\`\`\``;
+    if(b.type==='hr')return'---';
+    if(b.type==='list')return b.items.map((it,idx)=>b.ordered?`${idx+1}. ${it}`:`- ${it}`).join('\n');
+    return'';
+  }).join('\n\n');
+}
+function iMdToHtml(s){
+  return esc(s)
+    .replace(/~~([^~]+)~~/g,'<del>$1</del>')
+    .replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>')
+    .replace(/\*([^*]+)\*/g,'<em>$1</em>')
+    .replace(/`([^`]+)`/g,'<code>$1</code>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
+}
+function modelToHtml(m){
+  return m.map(b=>{
+    if(b.type==='h')return`<h${b.level}>${iMdToHtml(b.text)}</h${b.level}>`;
+    if(b.type==='p')return`<p>${iMdToHtml(b.text)}</p>`;
+    if(b.type==='bq')return`<blockquote>${iMdToHtml(b.text)}</blockquote>`;
+    if(b.type==='code')return`<pre><code>${esc(b.text)}</code></pre>`;
+    if(b.type==='hr')return'<hr>';
+    if(b.type==='list'){const tag=b.ordered?'ol':'ul';return`<${tag}>${b.items.map(i=>`<li>${iMdToHtml(i)}</li>`).join('')}</${tag}>`;}
+    return'';
+  }).join('');
+}
 
-    let analyticsState = loadAnalyticsState();
+/* ── Caret ── */
+function getCE(root){
+  const sel=window.getSelection();if(!sel||sel.rangeCount===0)return null;
+  const r=sel.getRangeAt(0);if(!root.contains(r.startContainer)||!root.contains(r.endContainer))return null;
+  const p=r.cloneRange();p.selectNodeContents(root);p.setEnd(r.startContainer,r.startOffset);
+  const pe=r.cloneRange();pe.selectNodeContents(root);pe.setEnd(r.endContainer,r.endOffset);
+  return{start:p.toString().length,end:pe.toString().length};
+}
+function setCE(root,start,end){
+  const w=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);
+  let node,idx=0,sN=null,eN=null,sO=0,eO=0;
+  while((node=w.nextNode())){const nx=idx+node.textContent.length;if(!sN&&start<=nx){sN=node;sO=Math.max(0,start-idx);}if(!eN&&end<=nx){eN=node;eO=Math.max(0,end-idx);break;}idx=nx;}
+  if(!sN||!eN)return;
+  const r=document.createRange();r.setStart(sN,sO);r.setEnd(eN,eO);
+  const sel=window.getSelection();sel.removeAllRanges();sel.addRange(r);
+}
 
-    function saveAnalyticsState() {
-      localStorage.setItem(ANALYTICS_STORAGE_KEY, JSON.stringify(analyticsState));
-    }
+/* ── Sync ── */
+let supR=false,supMd=false;
+let lastEdit={pane:null,at:0},bannerT,r2mT,m2rT;
+const DEBOUNCE=180;
+function registerEdit(pane){
+  const now=Date.now();
+  if(liveSyncToggle.checked&&lastEdit.pane&&lastEdit.pane!==pane&&now-lastEdit.at<1200){
+    const a=pane==='rich'?'Rich Text':'Markdown',b=lastEdit.pane==='rich'?'Rich Text':'Markdown';
+    conflictBanner.textContent=`⚠ Edited ${b} and ${a} simultaneously — live sync kept latest. Use Push buttons to choose direction.`;
+    conflictBanner.classList.add('show');clearTimeout(bannerT);
+    bannerT=setTimeout(()=>conflictBanner.classList.remove('show'),2800);
+  }
+  lastEdit={pane,at:now};
+}
+function syncRichToMarkdown(){
+  const model=htmlToModel(richEditor.innerHTML);const next=modelToMd(model);
+  const focused=document.activeElement===markdownPane;const ss=markdownPane.selectionStart,se=markdownPane.selectionEnd;
+  supMd=true;try{markdownPane.value=next;}finally{supMd=false;}
+  if(focused)markdownPane.setSelectionRange(ss,se);
+  updateStats();checkErrors();
+}
+function syncMarkdownToRich(){
+  const model=mdToModel(markdownPane.value);const next=modelToHtml(model);
+  const focused=document.activeElement===richEditor;const sel=getCE(richEditor);
+  supR=true;try{richEditor.innerHTML=next||'<p></p>';}finally{supR=false;}
+  if(focused&&sel){richEditor.focus();setCE(richEditor,sel.start,sel.end);}
+  updateStats();trackA('conversion');
+}
+function deb(dir){if(dir==='r2m'){clearTimeout(r2mT);r2mT=setTimeout(syncRichToMarkdown,DEBOUNCE);}else{clearTimeout(m2rT);m2rT=setTimeout(syncMarkdownToRich,DEBOUNCE);}}
 
-    function renderAnalyticsSummary() {
-      analyticsOptIn.checked = analyticsState.optedIn;
-      analyticsSummary.textContent = analyticsState.optedIn
-        ? `Anonymous metrics enabled — loads: ${analyticsState.pageLoads}, conversions: ${analyticsState.conversions}, copies: ${analyticsState.copyActions}`
-        : 'Anonymous metrics disabled';
-    }
+richEditor.addEventListener('input',()=>{if(supR)return;registerEdit('rich');if(liveSyncToggle.checked)deb('r2m');scheduleAutosave();});
+markdownPane.addEventListener('input',()=>{if(supMd)return;registerEdit('markdown');if(liveSyncToggle.checked)deb('m2r');scheduleAutosave();checkErrors();});
+document.getElementById('syncMdToRichBtn').addEventListener('click',()=>{clearTimeout(m2rT);syncMarkdownToRich();});
+document.getElementById('syncRichToMdBtn').addEventListener('click',()=>{clearTimeout(r2mT);syncRichToMarkdown();});
+liveSyncToggle.addEventListener('change',()=>{
+  const on=liveSyncToggle.checked;
+  syncDot.className='sdot'+(on?' live':'');syncLabel.textContent=on?'Live sync':'Sync off';
+});
 
-    function trackAnalytics(eventName) {
-      if (!analyticsState.optedIn) return;
-      if (eventName === 'page_load') analyticsState.pageLoads += 1;
-      if (eventName === 'conversion') analyticsState.conversions += 1;
-      if (eventName === 'copy_action') analyticsState.copyActions += 1;
-      saveAnalyticsState();
-      renderAnalyticsSummary();
+/* ── Stats ── */
+function updateStats(){
+  const raw=markdownPane.value;
+  const clean=raw.replace(/```[\s\S]*?```/g,'').replace(/[#*`>~\[\]_\-]/g,'').trim();
+  const words=clean?clean.split(/\s+/).filter(Boolean).length:0;
+  const chars=raw.length; const mins=Math.max(1,Math.round(words/200));
+  wordsStat.textContent=`${words.toLocaleString()} words`;
+  charsStat.textContent=`${chars.toLocaleString()} chars`;
+  readStat.textContent=`${mins} min read`;
+}
+markdownPane.addEventListener('keyup',updateCursor);
+markdownPane.addEventListener('click',updateCursor);
+function updateCursor(){
+  const v=markdownPane.value.substring(0,markdownPane.selectionStart);
+  const ln=v.split('\n').length,col=v.split('\n').pop().length+1;
+  cursorStatus.textContent=`Ln ${ln}, Col ${col}`;
+}
 
-      if (ANALYTICS_ENDPOINT) {
-        const payload = {
-          event: eventName,
-          ts: Date.now(),
-          route: location.pathname
-        };
-        navigator.sendBeacon(ANALYTICS_ENDPOINT, JSON.stringify(payload));
-      }
-    }
+/* ── Error highlight ── */
+function checkErrors(){
+  const lines=markdownPane.value.split('\n');const errLines=[];let inCode=false;
+  lines.forEach((line,i)=>{
+    if(line.startsWith('```')){inCode=!inCode;return;}if(inCode)return;
+    const bold=(line.match(/\*\*/g)||[]).length;if(bold%2!==0){errLines.push(i);return;}
+    const stripped=line.replace(/\*\*/g,'');const italic=(stripped.match(/(?<!\*)\*(?!\*)/g)||[]).length;
+    if(italic%2!==0){errLines.push(i);return;}
+    const code=(line.match(/`/g)||[]).length;if(code%2!==0){errLines.push(i);return;}
+    const ob=(line.match(/\[/g)||[]).length,cb=(line.match(/\]/g)||[]).length;if(ob!==cb)errLines.push(i);
+  });
+  mdErrorOverlay.innerHTML=lines.map((line,i)=>errLines.includes(i)?`<span class="md-err">${esc(line)||' '}\n</span>`:(esc(line)||' ')+'\n').join('');
+  if(errLines.length>0){errorStatus.style.display='flex';errorLabel.textContent=`${errLines.length} error${errLines.length>1?'s':''}`;}
+  else errorStatus.style.display='none';
+}
+markdownPane.addEventListener('scroll',()=>{mdErrorOverlay.scrollTop=markdownPane.scrollTop;});
 
-    function escapeHtml(s) {
-      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    }
+/* ── Copy ── */
+function flashCopy(btn){
+  btn.classList.add('success');const orig=btn.innerHTML;
+  btn.innerHTML='✓ Copied!';setTimeout(()=>{btn.classList.remove('success');btn.innerHTML=orig;},1400);
+}
+function doCopyMd(){navigator.clipboard.writeText(markdownPane.value);showToast('Markdown copied ✓');trackA('copy_action');}
+function doCopyRich(){navigator.clipboard.writeText(richEditor.innerHTML);showToast('HTML copied ✓');trackA('copy_action');}
+document.getElementById('copyMarkdownBtn').addEventListener('click',doCopyMd);
+document.getElementById('copyRichBtn').addEventListener('click',doCopyRich);
+document.getElementById('paneCopyMd').addEventListener('click',()=>{doCopyMd();flashCopy(document.getElementById('paneCopyMd'));});
+document.getElementById('paneCopyRich').addEventListener('click',()=>{doCopyRich();flashCopy(document.getElementById('paneCopyRich'));});
 
-    function inlineNodeToMarkdown(node) {
-      if (node.nodeType === Node.TEXT_NODE) return node.textContent;
-      if (node.nodeType !== Node.ELEMENT_NODE) return '';
-      const content = Array.from(node.childNodes).map(inlineNodeToMarkdown).join('');
-      const tag = node.tagName.toLowerCase();
-      if (tag === 'strong' || tag === 'b') return `**${content}**`;
-      if (tag === 'em' || tag === 'i') return `*${content}*`;
-      if (tag === 'code') return `\`${content}\``;
-      if (tag === 'a') return `[${content}](${node.getAttribute('href') || '#'})`;
-      if (tag === 'br') return '\n';
-      return content;
-    }
+/* ── Export ── */
+const exportBtn=document.getElementById('exportBtn'),exportMenu=document.getElementById('exportMenu');
+exportBtn.addEventListener('click',e=>{e.stopPropagation();exportMenu.classList.toggle('open');});
+document.addEventListener('click',()=>exportMenu.classList.remove('open'));
+function dl(content,name,mime){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type:mime}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
+document.getElementById('downloadMd').addEventListener('click',()=>{dl(markdownPane.value,'document.md','text/markdown;charset=utf-8');showToast('Downloaded as .md');exportMenu.classList.remove('open');});
+document.getElementById('downloadHtml').addEventListener('click',()=>{dl(`<!DOCTYPE html>\n<html lang="en">\n<head><meta charset="UTF-8"><title>Document</title></head>\n<body>\n${richEditor.innerHTML}\n</body>\n</html>`,'document.html','text/html;charset=utf-8');showToast('Downloaded as .html');exportMenu.classList.remove('open');});
 
-    function htmlToNormalizedModel(html) {
-      const doc = new DOMParser().parseFromString(`<div>${html}</div>`, 'text/html');
-      const root = doc.body.firstElementChild;
-      const model = [];
-      Array.from(root.childNodes).forEach((node) => {
-        if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()) {
-          model.push({ type: 'paragraph', text: node.textContent.trim() });
-          return;
-        }
-        if (node.nodeType !== Node.ELEMENT_NODE) return;
-        const tag = node.tagName.toLowerCase();
-        if (/^h[1-6]$/.test(tag)) {
-          model.push({ type: 'heading', level: Number(tag[1]), text: Array.from(node.childNodes).map(inlineNodeToMarkdown).join('') });
-        } else if (tag === 'p' || tag === 'div') {
-          model.push({ type: 'paragraph', text: Array.from(node.childNodes).map(inlineNodeToMarkdown).join('') });
-        } else if (tag === 'blockquote') {
-          model.push({ type: 'blockquote', text: Array.from(node.childNodes).map(inlineNodeToMarkdown).join('') });
-        } else if (tag === 'pre') {
-          model.push({ type: 'code', text: node.textContent.replace(/\n$/, '') });
-        } else if (tag === 'hr') {
-          model.push({ type: 'hr' });
-        } else if (tag === 'ul' || tag === 'ol') {
-          const items = Array.from(node.querySelectorAll(':scope > li')).map(li => Array.from(li.childNodes).map(inlineNodeToMarkdown).join(''));
-          model.push({ type: 'list', ordered: tag === 'ol', items });
-        } else {
-          model.push({ type: 'paragraph', text: Array.from(node.childNodes).map(inlineNodeToMarkdown).join('') });
-        }
-      });
-      return model;
-    }
+/* ── View modes ── */
+document.querySelectorAll('.view-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.view-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');workArea.setAttribute('data-view',btn.dataset.view);
+  });
+});
 
-    function markdownToNormalizedModel(markdown) {
-      const lines = markdown.replace(/\r\n?/g, '\n').split('\n');
-      const model = [];
-      let i = 0;
-      const flushParagraph = (buffer) => {
-        if (buffer.length) model.push({ type: 'paragraph', text: buffer.join(' ') });
-      };
-      while (i < lines.length) {
-        const line = lines[i];
-        if (!line.trim()) { i += 1; continue; }
-        const heading = line.match(/^(#{1,6})\s+(.+)$/);
-        if (heading) { model.push({ type: 'heading', level: heading[1].length, text: heading[2] }); i += 1; continue; }
-        if (/^(-{3,}|\*{3,}|_{3,})$/.test(line.trim())) { model.push({ type: 'hr' }); i += 1; continue; }
-        if (line.startsWith('```')) {
-          const buf = []; i += 1;
-          while (i < lines.length && !lines[i].startsWith('```')) { buf.push(lines[i]); i += 1; }
-          if (i < lines.length) i += 1;
-          model.push({ type: 'code', text: buf.join('\n') });
-          continue;
-        }
-        if (/^>\s?/.test(line)) { model.push({ type: 'blockquote', text: line.replace(/^>\s?/, '') }); i += 1; continue; }
-        if (/^\s*([-*+]\s+|\d+\.\s+)/.test(line)) {
-          const ordered = /^\s*\d+\.\s+/.test(line);
-          const items = [];
-          while (i < lines.length && /^\s*([-*+]\s+|\d+\.\s+)/.test(lines[i])) {
-            items.push(lines[i].replace(/^\s*([-*+]\s+|\d+\.\s+)/, ''));
-            i += 1;
-          }
-          model.push({ type: 'list', ordered, items });
-          continue;
-        }
-        const para = [];
-        while (i < lines.length && lines[i].trim() && !/^(#{1,6})\s+/.test(lines[i]) && !/^\s*([-*+]\s+|\d+\.\s+)/.test(lines[i]) && !lines[i].startsWith('```') && !/^>\s?/.test(lines[i])) {
-          para.push(lines[i]); i += 1;
-        }
-        flushParagraph(para);
-      }
-      return model;
-    }
+/* ── Fullscreen ── */
+let fsOn=false;
+document.getElementById('fullscreenBtn').addEventListener('click',toggleFs);
+document.addEventListener('keydown',e=>{if(e.key==='F11'){e.preventDefault();toggleFs();}if(e.key==='Escape'&&fsOn)toggleFs();});
+function toggleFs(){
+  fsOn=!fsOn;appRoot.classList.toggle('fullscreen',fsOn);
+  document.getElementById('fsIcon').innerHTML=fsOn
+    ?'<path d="M6 2H2v4m0 4v4h4m4 0h4v-4m0-4V2h-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>'
+    :'<path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>';
+}
 
-    function modelToMarkdown(model) {
-      return model.map((block) => {
-        if (block.type === 'heading') return `${'#'.repeat(block.level)} ${block.text}`;
-        if (block.type === 'paragraph') return block.text;
-        if (block.type === 'blockquote') return `> ${block.text}`;
-        if (block.type === 'code') return `\`\`\`\n${block.text}\n\`\`\``;
-        if (block.type === 'hr') return '---';
-        if (block.type === 'list') return block.items.map((it, idx) => block.ordered ? `${idx + 1}. ${it}` : `- ${it}`).join('\n');
-        return '';
-      }).join('\n\n');
-    }
+/* ── Settings ── */
+const settingsBtn=document.getElementById('settingsBtn'),settingsPanel=document.getElementById('settingsPanel');
+settingsBtn.addEventListener('click',e=>{e.stopPropagation();settingsPanel.classList.toggle('open');});
+document.addEventListener('click',()=>settingsPanel.classList.remove('open'));
+settingsPanel.addEventListener('click',e=>e.stopPropagation());
 
-    function inlineMarkdownToHtml(text) {
-      return escapeHtml(text)
-        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*([^*]+)\*/g, '<em>$1</em>')
-        .replace(/`([^`]+)`/g, '<code>$1</code>')
-        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
-    }
+/* ── Auto-save ── */
+const AS_KEY='mdc.autosave.v1';let asT;
+function saveContent(){
+  saveDot.className='sdot saving';saveLabel.textContent='Saving…';
+  localStorage.setItem(AS_KEY,JSON.stringify({markdown:markdownPane.value,at:Date.now()}));
+  setTimeout(()=>{saveDot.className='sdot saved';saveLabel.textContent='Saved';setTimeout(()=>{saveDot.className='sdot';saveLabel.textContent='Auto-save';},2000);},350);
+}
+function scheduleAutosave(){clearTimeout(asT);asT=setTimeout(saveContent,1200);}
+function loadSaved(){try{const d=JSON.parse(localStorage.getItem(AS_KEY)||'{}');if(d.markdown){markdownPane.value=d.markdown;syncMarkdownToRich();return true;}}catch(_){}return false;}
 
-    function modelToHtml(model) {
-      return model.map((block) => {
-        if (block.type === 'heading') return `<h${block.level}>${inlineMarkdownToHtml(block.text)}</h${block.level}>`;
-        if (block.type === 'paragraph') return `<p>${inlineMarkdownToHtml(block.text)}</p>`;
-        if (block.type === 'blockquote') return `<blockquote>${inlineMarkdownToHtml(block.text)}</blockquote>`;
-        if (block.type === 'code') return `<pre><code>${escapeHtml(block.text)}</code></pre>`;
-        if (block.type === 'hr') return '<hr>';
-        if (block.type === 'list') {
-          const tag = block.ordered ? 'ol' : 'ul';
-          return `<${tag}>${block.items.map((i) => `<li>${inlineMarkdownToHtml(i)}</li>`).join('')}</${tag}>`;
-        }
-        return '';
-      }).join('');
-    }
-
-    function getContentEditableSelectionOffsets(root) {
-      const sel = window.getSelection();
-      if (!sel || sel.rangeCount === 0) return null;
-      const range = sel.getRangeAt(0);
-      if (!root.contains(range.startContainer) || !root.contains(range.endContainer)) return null;
-      const preStart = range.cloneRange();
-      preStart.selectNodeContents(root);
-      preStart.setEnd(range.startContainer, range.startOffset);
-      const preEnd = range.cloneRange();
-      preEnd.selectNodeContents(root);
-      preEnd.setEnd(range.endContainer, range.endOffset);
-      return { start: preStart.toString().length, end: preEnd.toString().length };
-    }
-
-    function setContentEditableSelectionOffsets(root, start, end) {
-      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-      let node;
-      let idx = 0;
-      let startNode = null, endNode = null, startOffset = 0, endOffset = 0;
-      while ((node = walker.nextNode())) {
-        const next = idx + node.textContent.length;
-        if (!startNode && start <= next) { startNode = node; startOffset = Math.max(0, start - idx); }
-        if (!endNode && end <= next) { endNode = node; endOffset = Math.max(0, end - idx); break; }
-        idx = next;
-      }
-      if (!startNode || !endNode) return;
-      const range = document.createRange();
-      range.setStart(startNode, startOffset);
-      range.setEnd(endNode, endOffset);
-      const sel = window.getSelection();
-      sel.removeAllRanges();
-      sel.addRange(range);
-    }
-
-    function showConflict(activePane, previousPane) {
-      const activeLabel = activePane === 'rich' ? 'Rich Text' : 'Markdown';
-      const previousLabel = previousPane === 'rich' ? 'Rich Text' : 'Markdown';
-      conflictBanner.textContent = `⚠️ You edited ${previousLabel} and ${activeLabel} almost at the same time. Live sync keeps the latest change. Use manual sync buttons to choose a direction explicitly.`;
-      conflictBanner.classList.add('show');
-      clearTimeout(bannerTimer);
-      bannerTimer = setTimeout(() => conflictBanner.classList.remove('show'), 2600);
-    }
-
-    function registerEdit(pane) {
-      const now = Date.now();
-      if (liveSyncToggle.checked && lastEdit.pane && lastEdit.pane !== pane && now - lastEdit.at < 1200) {
-        showConflict(pane, lastEdit.pane);
-      }
-      lastEdit = { pane, at: now };
-    }
-
-    function syncRichToMarkdown() {
-      const model = htmlToNormalizedModel(richEditor.innerHTML);
-      const nextMarkdown = modelToMarkdown(model);
-      const focused = document.activeElement === markdownPane;
-      const sel = { start: markdownPane.selectionStart, end: markdownPane.selectionEnd };
-      suppressMarkdownInput = true;
-      try {
-        markdownPane.value = nextMarkdown;
-      } finally {
-        suppressMarkdownInput = false;
-      }
-      if (focused) markdownPane.setSelectionRange(sel.start, sel.end);
-    }
-
-    function syncMarkdownToRich() {
-      const model = markdownToNormalizedModel(markdownPane.value);
-      const nextHtml = modelToHtml(model);
-      const focused = document.activeElement === richEditor;
-      const sel = getContentEditableSelectionOffsets(richEditor);
-      suppressRichInput = true;
-      try {
-        richEditor.innerHTML = nextHtml || '<p></p>';
-      } finally {
-        suppressRichInput = false;
-      }
-      if (focused && sel) {
-        richEditor.focus();
-        setContentEditableSelectionOffsets(richEditor, sel.start, sel.end);
-      }
-      trackAnalytics('conversion');
-    }
-
-    function debounceLiveSync(direction) {
-      if (direction === 'rich-to-markdown') {
-        clearTimeout(richToMarkdownTimer);
-        richToMarkdownTimer = setTimeout(() => syncRichToMarkdown(), LIVE_SYNC_DEBOUNCE_MS);
-      } else {
-        clearTimeout(markdownToRichTimer);
-        markdownToRichTimer = setTimeout(() => syncMarkdownToRich(), LIVE_SYNC_DEBOUNCE_MS);
-      }
-    }
-
-    richEditor.addEventListener('input', () => {
-      if (suppressRichInput) return;
-      registerEdit('rich');
-      if (liveSyncToggle.checked) debounceLiveSync('rich-to-markdown');
+/* ── Version history ── */
+const VK='mdc.versions.v1',MAX_V=30;
+function getVers(){try{return JSON.parse(localStorage.getItem(VK)||'[]');}catch(_){return[];}}
+function setVers(v){localStorage.setItem(VK,JSON.stringify(v));}
+function autoLabel(){const h=markdownPane.value.match(/^#+ (.+)/m);if(h)return h[1].slice(0,42);return markdownPane.value.split('\n').find(l=>l.trim())?.slice(0,42)||'Untitled';}
+function timeAgo(ts){const d=Date.now()-ts;if(d<60000)return'just now';if(d<3600000)return Math.floor(d/60000)+'m ago';if(d<86400000)return Math.floor(d/3600000)+'h ago';return new Date(ts).toLocaleDateString();}
+function wordsIn(md){const t=md.replace(/[#*`>~\[\]_]/g,'').trim();return t?t.split(/\s+/).filter(Boolean).length:0;}
+function createVersion(label){
+  const md=markdownPane.value;if(!md.trim())return;
+  const vers=getVers();if(vers.length&&vers[0].markdown===md)return;
+  vers.unshift({id:Date.now(),markdown:md,at:Date.now(),label:label||autoLabel(),words:wordsIn(md)});
+  if(vers.length>MAX_V)vers.splice(MAX_V);
+  setVers(vers);renderVersionList();
+}
+function renderVersionList(){
+  const vers=getVers();
+  if(!vers.length){versionList.innerHTML='<div class="vd-empty">No versions saved yet.<br>Versions are captured automatically every 2 minutes while you edit.</div>';return;}
+  versionList.innerHTML=vers.map((v,i)=>`
+    <div class="vd-item${i===0?' current':''}" data-id="${v.id}">
+      <div class="vd-name">${esc(v.label)}</div>
+      <div class="vd-meta">${timeAgo(v.at)} · ${v.words} words</div>
+      <div class="vd-preview">${esc(v.markdown.slice(0,60))}…</div>
+    </div>`).join('');
+  versionList.querySelectorAll('.vd-item').forEach(el=>{
+    el.addEventListener('click',()=>{
+      const v=getVers().find(x=>x.id===+el.dataset.id);if(!v)return;
+      if(!confirm('Restore this version? Current content will be replaced.'))return;
+      markdownPane.value=v.markdown;syncMarkdownToRich();renderVersionList();showToast('Version restored ✓');
     });
+  });
+}
+let vT;
+richEditor.addEventListener('input',()=>{clearTimeout(vT);vT=setTimeout(createVersion,120000);});
+markdownPane.addEventListener('input',()=>{clearTimeout(vT);vT=setTimeout(createVersion,120000);});
+setInterval(createVersion,120000);
+window.addEventListener('beforeunload',()=>createVersion('Session end'));
+document.getElementById('openVersionDrawer').addEventListener('click',()=>{renderVersionList();versionDrawer.classList.add('open');});
+document.getElementById('closeVersionDrawer').addEventListener('click',()=>versionDrawer.classList.remove('open'));
+document.getElementById('saveVersionNowBtn').addEventListener('click',()=>{createVersion();showToast('Version saved ✓');});
+document.getElementById('clearVersionsBtn').addEventListener('click',()=>{if(!confirm('Clear all version history?'))return;localStorage.removeItem(VK);renderVersionList();showToast('History cleared');});
 
-    markdownPane.addEventListener('input', () => {
-      if (suppressMarkdownInput) return;
-      registerEdit('markdown');
-      if (liveSyncToggle.checked) debounceLiveSync('markdown-to-rich');
-    });
+/* ── INIT ── */
+renderA(); trackA('page_load');
+const hasSaved=loadSaved();
+if(!hasSaved){
+  markdownPane.value=`# Welcome to md.editor
 
-    syncFromRichBtn.addEventListener('click', () => {
-      clearTimeout(richToMarkdownTimer);
-      syncRichToMarkdown();
-    });
-    syncFromMarkdownBtn.addEventListener('click', () => {
-      clearTimeout(markdownToRichTimer);
-      syncMarkdownToRich();
-    });
-    analyticsOptIn.addEventListener('change', () => {
-      analyticsState.optedIn = analyticsOptIn.checked;
-      saveAnalyticsState();
-      renderAnalyticsSummary();
-      if (analyticsState.optedIn) trackAnalytics('page_load');
-    });
+This is a **dual-way** Markdown ↔ Rich Text editor.
 
-    copyMarkdownBtn.addEventListener('click', async () => {
-      await navigator.clipboard.writeText(markdownPane.value);
-      copyMarkdownBtn.textContent = 'Copied!';
-      setTimeout(() => { copyMarkdownBtn.textContent = 'Copy Markdown'; }, 1200);
-      trackAnalytics('copy_action');
-    });
+## What you can do
+- Edit in either pane — both stay in sync
+- Switch views using the buttons above
+- **Copy** or **Export** when you're done
 
-    renderAnalyticsSummary();
-    trackAnalytics('page_load');
-    syncRichToMarkdown();
-  </script>
+## Formatting examples
+- **Bold** with \`**double asterisks**\`
+- *Italic* with \`*single asterisks*\`
+- \`Inline code\` with backticks
+
+> Tip: Use Split view to edit and preview simultaneously.
+
+---
+
+Start typing to replace this content.`;
+  syncMarkdownToRich();
+}
+updateStats();checkErrors();renderVersionList();
+</script>
 </body>
 </html>
