@@ -35,7 +35,7 @@
 <body>
   <div class="app">
     <h1>Dual Markdown / Rich Text Editor</h1>
-    <div id="conflictBanner">⚠️ Rapid edits detected in both panes. Last edit wins. Use manual sync to resolve safely.</div>
+    <div id="conflictBanner">⚠️ You edited both panes quickly. Live sync keeps the latest change, so use manual sync buttons if you want to pick a direction explicitly.</div>
     <div class="controls">
       <label><input id="liveSyncToggle" type="checkbox" checked /> Live sync</label>
       <button class="btn" id="syncFromRichBtn">Sync Rich → Markdown</button>
@@ -76,6 +76,10 @@
     let suppressMarkdownInput = false;
     let lastEdit = { pane: null, at: 0 };
     let bannerTimer;
+    let richToMarkdownTimer = null;
+    let markdownToRichTimer = null;
+
+    const LIVE_SYNC_DEBOUNCE_MS = 180;
 
     function loadAnalyticsState() {
       try {
@@ -279,15 +283,20 @@
       sel.addRange(range);
     }
 
-    function showConflict() {
+    function showConflict(activePane, previousPane) {
+      const activeLabel = activePane === 'rich' ? 'Rich Text' : 'Markdown';
+      const previousLabel = previousPane === 'rich' ? 'Rich Text' : 'Markdown';
+      conflictBanner.textContent = `⚠️ You edited ${previousLabel} and ${activeLabel} almost at the same time. Live sync keeps the latest change. Use manual sync buttons to choose a direction explicitly.`;
       conflictBanner.classList.add('show');
       clearTimeout(bannerTimer);
-      bannerTimer = setTimeout(() => conflictBanner.classList.remove('show'), 1800);
+      bannerTimer = setTimeout(() => conflictBanner.classList.remove('show'), 2600);
     }
 
     function registerEdit(pane) {
       const now = Date.now();
-      if (lastEdit.pane && lastEdit.pane !== pane && now - lastEdit.at < 700) showConflict();
+      if (liveSyncToggle.checked && lastEdit.pane && lastEdit.pane !== pane && now - lastEdit.at < 1200) {
+        showConflict(pane, lastEdit.pane);
+      }
       lastEdit = { pane, at: now };
     }
 
@@ -297,8 +306,11 @@
       const focused = document.activeElement === markdownPane;
       const sel = { start: markdownPane.selectionStart, end: markdownPane.selectionEnd };
       suppressMarkdownInput = true;
-      markdownPane.value = nextMarkdown;
-      suppressMarkdownInput = false;
+      try {
+        markdownPane.value = nextMarkdown;
+      } finally {
+        suppressMarkdownInput = false;
+      }
       if (focused) markdownPane.setSelectionRange(sel.start, sel.end);
     }
 
@@ -308,8 +320,11 @@
       const focused = document.activeElement === richEditor;
       const sel = getContentEditableSelectionOffsets(richEditor);
       suppressRichInput = true;
-      richEditor.innerHTML = nextHtml || '<p></p>';
-      suppressRichInput = false;
+      try {
+        richEditor.innerHTML = nextHtml || '<p></p>';
+      } finally {
+        suppressRichInput = false;
+      }
       if (focused && sel) {
         richEditor.focus();
         setContentEditableSelectionOffsets(richEditor, sel.start, sel.end);
@@ -317,20 +332,36 @@
       trackAnalytics('conversion');
     }
 
+    function debounceLiveSync(direction) {
+      if (direction === 'rich-to-markdown') {
+        clearTimeout(richToMarkdownTimer);
+        richToMarkdownTimer = setTimeout(() => syncRichToMarkdown(), LIVE_SYNC_DEBOUNCE_MS);
+      } else {
+        clearTimeout(markdownToRichTimer);
+        markdownToRichTimer = setTimeout(() => syncMarkdownToRich(), LIVE_SYNC_DEBOUNCE_MS);
+      }
+    }
+
     richEditor.addEventListener('input', () => {
       if (suppressRichInput) return;
       registerEdit('rich');
-      if (liveSyncToggle.checked) syncRichToMarkdown();
+      if (liveSyncToggle.checked) debounceLiveSync('rich-to-markdown');
     });
 
     markdownPane.addEventListener('input', () => {
       if (suppressMarkdownInput) return;
       registerEdit('markdown');
-      if (liveSyncToggle.checked) syncMarkdownToRich();
+      if (liveSyncToggle.checked) debounceLiveSync('markdown-to-rich');
     });
 
-    syncFromRichBtn.addEventListener('click', syncRichToMarkdown);
-    syncFromMarkdownBtn.addEventListener('click', syncMarkdownToRich);
+    syncFromRichBtn.addEventListener('click', () => {
+      clearTimeout(richToMarkdownTimer);
+      syncRichToMarkdown();
+    });
+    syncFromMarkdownBtn.addEventListener('click', () => {
+      clearTimeout(markdownToRichTimer);
+      syncMarkdownToRich();
+    });
     analyticsOptIn.addEventListener('change', () => {
       analyticsState.optedIn = analyticsOptIn.checked;
       saveAnalyticsState();
